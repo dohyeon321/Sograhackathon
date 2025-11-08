@@ -40,14 +40,10 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
 
   const handleWriteClick = () => {
     if (!currentUser) {
-      if (onLoginClick) {
-        onLoginClick()
-      }
+      if (onLoginClick) onLoginClick()
       return
     }
-    if (onWriteClick) {
-      onWriteClick()
-    }
+    if (onWriteClick) onWriteClick()
   }
 
   return (
@@ -60,64 +56,87 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
                 src="/logo.png" 
                 alt="찐대충인 로고" 
                 className="w-16 h-16 object-contain"
-                onError={(e) => {
-                  // 이미지가 없으면 숨김
-                  e.target.style.display = 'none'
-                }}
+                onError={(e) => { e.target.style.display = 'none' }}
               />
               <h1 className="text-3xl font-bold text-gray-700">
                 <span className="text-blue-500">찐대충인</span>
               </h1>
             </div>
+
             <div className="flex items-center gap-3">
               {currentUser ? (
+                // 로그인된 상태
                 <div className="relative" ref={menuRef}>
                   <button
                     onClick={() => {
-                      if (onProfileClick) {
-                        onProfileClick()
-                      } else {
-                        setShowUserMenu(!showUserMenu)
-                      }
+                      if (onProfileClick) onProfileClick()
+                      else setShowUserMenu(!showUserMenu)
                     }}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg hover:bg-gray-100 transition"
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition"
                   >
-                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white text-base font-semibold">
-                      {userData?.displayName?.[0] || currentUser.email?.[0]?.toUpperCase()}
+                    {/* 아바타 */}
+                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-semibold">
+                      {userData?.displayName?.[0] ||
+                        currentUser?.displayName?.[0] ||
+                        currentUser?.email?.[0]?.toUpperCase() ||
+                        '유'}
                     </div>
-                    <span className="hidden md:block text-base font-medium text-gray-700 flex items-center gap-2">
-                      {userData?.displayName || '사용자'}
+
+                    {/* 이름 + 로컬 뱃지 */}
+                    <div className="hidden md:flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <span>
+                        {userData?.displayName ||
+                          currentUser?.displayName ||
+                          currentUser?.email?.split('@')[0] ||
+                          '사용자'}
+                      </span>
                       {isLocal && (
-                        <span className="bg-yellow-400 text-white px-2 py-0.5 rounded text-xs font-semibold">
-                          로컬
+                        <span className="flex items-center gap-1 bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-2.5 py-0.5 rounded-full text-xs font-semibold shadow-sm">
+                          🏡 <span className="hidden sm:inline">로컬</span>
                         </span>
                       )}
-                    </span>
-                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </div>
+
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
                     </svg>
                   </button>
-                  
+
+                  {/* 사용자 메뉴 드롭다운 */}
                   {showUserMenu && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
                       <div className="px-4 py-2 border-b border-gray-100">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="text-sm font-medium text-gray-800">{userData?.displayName}</p>
+                          <p className="text-sm font-medium text-gray-800">
+                            {userData?.displayName || '사용자'}
+                          </p>
                           {isLocal && (
                             <span className="bg-yellow-400 text-white px-1.5 py-0.5 rounded text-xs font-semibold">
                               로컬
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500">{userData?.email || currentUser.email}</p>
-                        <p className="text-xs text-gray-500 mt-1">📍 {userData?.region}</p>
+                        <p className="text-xs text-gray-500">
+                          {userData?.email || currentUser?.email}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          📍 {userData?.region || '지역 미설정'}
+                        </p>
                       </div>
                       <button
                         onClick={() => {
                           setShowUserMenu(false)
-                          if (onProfileClick) {
-                            onProfileClick()
-                          }
+                          if (onProfileClick) onProfileClick()
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition"
                       >
@@ -133,17 +152,16 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
                   )}
                 </div>
               ) : (
+                // 로그인 안 된 상태
                 <button
-                  onClick={() => {
-                    if (onLoginClick) {
-                      onLoginClick()
-                    }
-                  }}
+                  onClick={onLoginClick}
                   className="px-5 py-2.5 text-base font-medium text-gray-700 hover:text-blue-500 transition"
                 >
                   로그인
                 </button>
               )}
+
+              {/* 글쓰기 버튼 */}
               <button
                 onClick={handleWriteClick}
                 className="px-5 py-2.5 bg-blue-500 text-white rounded-lg text-base font-medium hover:bg-blue-600 transition"
@@ -159,4 +177,3 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
 }
 
 export default Header
-

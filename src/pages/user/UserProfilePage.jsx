@@ -5,11 +5,11 @@ import { useAuth } from '../../contexts/AuthContext'
 
 function formatTimeAgo(timestamp) {
   if (!timestamp) return '방금 전'
-  
+
   const now = new Date()
   const postTime = timestamp.toDate()
   const diffInSeconds = Math.floor((now - postTime) / 1000)
-  
+
   if (diffInSeconds < 60) return '방금 전'
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}분 전`
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}시간 전`
@@ -18,7 +18,7 @@ function formatTimeAgo(timestamp) {
 }
 
 function UserProfilePage({ onBack, onEditPost, onPostClick }) {
-  const { currentUser, userData } = useAuth()
+  const { currentUser, userData, logout } = useAuth()
   const [userPosts, setUserPosts] = useState([])
   const [userComments, setUserComments] = useState([])
   const [loading, setLoading] = useState(true)
@@ -38,7 +38,7 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       if (!db || !currentUser) return
 
       const postsRef = collection(db, 'posts')
-      
+
       try {
         const q = query(
           postsRef,
@@ -92,7 +92,7 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       if (!db || !currentUser) return
 
       const commentsRef = collection(db, 'comments')
-      
+
       try {
         const q = query(
           commentsRef,
@@ -138,15 +138,6 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       console.error('댓글 불러오기 에러:', err)
     }
   }
-
-  const isDaejeonChungcheong = (region) => {
-    if (!region) return false
-    const regionLower = region.toLowerCase()
-    const keywords = ['대전', '충청', '충남', '충북', '세종', '대전광역시', '충청남도', '충청북도', '세종특별자치시']
-    return keywords.some(keyword => regionLower.includes(keyword))
-  }
-
-  const isLocal = isDaejeonChungcheong(userData?.region)
 
   // 게시물 삭제
   const handleDeletePost = async (postId) => {
@@ -284,7 +275,6 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       alert('댓글 수정 중 오류가 발생했습니다.')
     }
   }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -331,21 +321,45 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
         </button>
 
         {/* 프로필 정보 */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6 relative">
+          {/* ✅ 로그아웃 버튼 추가 */}
+          <button
+            onClick={async () => {
+              await logout()
+              alert('로그아웃되었습니다.')
+              onBack()
+            }}
+            className="absolute top-4 right-4 bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600 transition"
+          >
+            로그아웃
+          </button>
           <div className="flex items-center gap-4 mb-6">
-            <div className="w-20 h-20 rounded-full bg-blue-500 flex items-center justify-center text-white text-3xl font-semibold">
-              {userData?.displayName?.[0] || currentUser?.email?.[0]?.toUpperCase() || '사'}
+            {/* ✅ 프로필 사진 + 로컬 뱃지 */}
+            <div className="relative w-20 h-20">
+              <div className="w-20 h-20 rounded-full bg-blue-500 flex items-center justify-center text-white text-3xl font-semibold">
+                {userData?.displayName?.[0] || currentUser?.email?.[0]?.toUpperCase() || '사'}
+              </div>
+
+              {/* ✅ 프로필 위 원형 뱃지 (isLocal이 true일 때만 표시) */}
+              {userData?.isLocal && (
+                <div className="absolute -top-2 -right-2 bg-yellow-400 text-white text-xs font-bold px-2 py-1 rounded-full shadow-md">
+                  🏡
+                </div>
+              )}
             </div>
+
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <h1 className="text-2xl font-bold text-gray-800">
                   {userData?.displayName || '사용자'}
                 </h1>
-                {isLocal && (
-                  <span className="bg-yellow-400 text-white px-2 py-1 rounded text-xs font-semibold">
-                    로컬
+                {userData?.isLocal && (
+                  <span className="bg-yellow-400 text-white px-3 py-1 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1">
+                    🏡 로컬 인증
                   </span>
                 )}
+
+
               </div>
               <p className="text-gray-600">{userData?.email || currentUser?.email}</p>
               <p className="text-sm text-gray-500 mt-1">📍 {userData?.region || '지역 미설정'}</p>
@@ -369,6 +383,36 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
               <p className="text-sm text-gray-500">받은 좋아요</p>
             </div>
           </div>
+          {/* ✅ 로컬 인증 안내 박스 (모든 사용자에게 표시) */}
+          <div className="bg-white rounded-lg shadow-sm p-6 mt-8 mb-6">
+            <div className="bg-orange-50 border-l-4 border-orange-400 text-orange-700 p-4 rounded-md shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-sm">
+                    🏡 로컬 인증은 90일마다 갱신이 필요합니다.
+                  </p>
+
+                  {/* ✅ 로컬 여부에 따라 문구 달라짐 */}
+                  {userData?.isLocal ? (
+                    <p className="text-xs mt-1 text-orange-600">
+                      현재 로컬 인증 상태입니다. 인증은 90일간 유효합니다.
+                    </p>
+                  ) : (
+                    <p className="text-xs mt-1 text-orange-600">
+                      아직 로컬 인증이 완료되지 않았습니다. 인증 후 로컬 전용 혜택을 이용할 수 있습니다.
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => alert('로컬 인증 기능은 준비 중입니다!')}
+                  className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition"
+                >
+                  로컬 인증하러 가기
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 탭 */}
@@ -376,21 +420,19 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
           <div className="flex border-b border-gray-200">
             <button
               onClick={() => setActiveTab('posts')}
-              className={`flex-1 px-6 py-4 font-medium transition ${
-                activeTab === 'posts'
-                  ? 'text-blue-500 border-b-2 border-blue-500'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
+              className={`flex-1 px-6 py-4 font-medium transition ${activeTab === 'posts'
+                ? 'text-blue-500 border-b-2 border-blue-500'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
             >
               게시물 ({userPosts.length})
             </button>
             <button
               onClick={() => setActiveTab('comments')}
-              className={`flex-1 px-6 py-4 font-medium transition ${
-                activeTab === 'comments'
-                  ? 'text-blue-500 border-b-2 border-blue-500'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
+              className={`flex-1 px-6 py-4 font-medium transition ${activeTab === 'comments'
+                ? 'text-blue-500 border-b-2 border-blue-500'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
             >
               댓글 ({userComments.length})
             </button>

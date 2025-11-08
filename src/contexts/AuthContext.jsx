@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { 
-  createUserWithEmailAndPassword, 
+import {
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
@@ -25,13 +25,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   // 회원가입
-  async function signup(email, password, displayName, region) {
+  async function signup(email, password, displayName, region, isLocal = false) {
     try {
       // Firebase 설정 확인
       if (!isFirebaseConfigured) {
-        return { 
-          success: false, 
-          error: 'Firebase가 설정되지 않았습니다. .env 파일에 Firebase 설정을 추가해주세요.' 
+        return {
+          success: false,
+          error: 'Firebase가 설정되지 않았습니다. .env 파일에 Firebase 설정을 추가해주세요.'
         }
       }
 
@@ -49,9 +49,9 @@ export function AuthProvider({ children }) {
 
       // Firebase Auth 초기화 확인
       if (!auth) {
-        return { 
-          success: false, 
-          error: 'Firebase가 초기화되지 않았습니다. 서버를 재시작해주세요.' 
+        return {
+          success: false,
+          error: 'Firebase가 초기화되지 않았습니다. 서버를 재시작해주세요.'
         }
       }
 
@@ -70,6 +70,7 @@ export function AuthProvider({ children }) {
         email: user.email,
         displayName: displayName,
         region: region,
+        isLocal: isLocal,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }
@@ -80,7 +81,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error('회원가입 에러:', error)
       let errorMessage = '회원가입 중 오류가 발생했습니다.'
-      
+
       if (error.code === 'auth/email-already-in-use') {
         errorMessage = '이미 사용 중인 이메일입니다.'
       } else if (error.code === 'auth/weak-password') {
@@ -102,17 +103,17 @@ export function AuthProvider({ children }) {
     try {
       // Firebase 설정 확인
       if (!isFirebaseConfigured) {
-        return { 
-          success: false, 
-          error: 'Firebase가 설정되지 않았습니다. .env 파일에 Firebase 설정을 추가해주세요.' 
+        return {
+          success: false,
+          error: 'Firebase가 설정되지 않았습니다. .env 파일에 Firebase 설정을 추가해주세요.'
         }
       }
 
       // Firebase Auth 초기화 확인
       if (!auth) {
-        return { 
-          success: false, 
-          error: 'Firebase가 초기화되지 않았습니다. 서버를 재시작해주세요.' 
+        return {
+          success: false,
+          error: 'Firebase가 초기화되지 않았습니다. 서버를 재시작해주세요.'
         }
       }
 
@@ -121,7 +122,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       console.error('로그인 에러:', error)
       let errorMessage = '로그인 중 오류가 발생했습니다.'
-      
+
       if (error.code === 'auth/user-not-found') {
         errorMessage = '등록되지 않은 이메일입니다.'
       } else if (error.code === 'auth/wrong-password') {
@@ -157,7 +158,7 @@ export function AuthProvider({ children }) {
       if (!db) {
         return null
       }
-      
+
       const userDoc = await getDoc(doc(db, 'users', uid))
       if (userDoc.exists()) {
         return userDoc.data()
@@ -186,38 +187,37 @@ export function AuthProvider({ children }) {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user)
-      
+
       if (user) {
-        // 사용자 데이터 가져오기 (오프라인 상태에서도 기본 정보는 사용)
+        let data = null
         try {
-          const data = await fetchUserData(user.uid)
-          if (data) {
-            setUserData(data)
-          } else {
-            // Firestore에서 데이터를 가져오지 못한 경우, Auth 정보로 기본 데이터 생성
-            setUserData({
-              displayName: user.displayName || user.email?.split('@')[0] || '사용자',
-              email: user.email,
-              region: ''
-            })
-          }
-        } catch (error) {
-          // 에러 발생 시에도 기본 정보는 설정
-          setUserData({
+          data = await fetchUserData(user.uid)
+        } catch (e) {
+          console.warn('fetchUserData 실패:', e)
+        }
+
+        if (!data) {
+          // Fallback — Firestore 데이터 없으면 최소 기본정보
+          data = {
             displayName: user.displayName || user.email?.split('@')[0] || '사용자',
             email: user.email,
-            region: ''
-          })
+            region: '',
+            isLocal: false,
+          }
         }
+
+        setUserData(data)
       } else {
+        // user가 null인 경우 (로그아웃 상태)
         setUserData(null)
       }
-      
+
       setLoading(false)
     })
 
     return unsubscribe
   }, [auth])
+
 
   const value = {
     currentUser,

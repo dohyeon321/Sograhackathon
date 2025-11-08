@@ -32,6 +32,8 @@ function SignupForm({ onClose, onSwitchToLogin }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { signup } = useAuth()
+  const [isLocalVerified, setIsLocalVerified] = useState(false)
+
 
   const handleChange = (e) => {
     setFormData({
@@ -96,7 +98,8 @@ function SignupForm({ onClose, onSwitchToLogin }) {
         formData.email,
         formData.password,
         formData.displayName,
-        formData.region
+        formData.region,
+        isLocalVerified
       )
 
       if (result.success) {
@@ -218,6 +221,47 @@ function SignupForm({ onClose, onSwitchToLogin }) {
             </option>
           ))}
         </select>
+      </div>
+      {/* ✅ 로컬 인증 버튼 추가 */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => {
+            if (!navigator.geolocation) {
+              alert('이 브라우저에서는 위치 정보 기능을 지원하지 않습니다.')
+              return
+            }
+
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                const { latitude, longitude } = pos.coords
+                console.log('현재 좌표:', latitude, longitude)
+
+                if (latitude > 35.8 && latitude < 37.2 && longitude > 126.5 && longitude < 128.3) {
+                  alert('로컬 인증 성공! 🎉 대전·충청 지역이 확인되었습니다.')
+                  setIsLocalVerified(true)
+                } else {
+                  alert('현재 위치가 대전·충청 지역이 아닙니다.')
+                  setIsLocalVerified(false)
+                }
+              },
+              (err) => {
+                console.error('위치 정보 접근 실패:', err)
+                alert('위치 정보 접근이 거부되었습니다.')
+                setIsLocalVerified(false)
+              }
+            )
+          }}
+          className="bg-gray-200 hover:bg-gray-300 text-sm px-3 py-2 rounded"
+        >
+          로컬 인증하기
+        </button>
+
+        {isLocalVerified ? (
+          <span className="text-green-600 text-sm font-medium">✔ 로컬 인증 완료</span>
+        ) : (
+          <span className="text-gray-400 text-sm">미인증</span>
+        )}
       </div>
 
       <button
