@@ -8,18 +8,22 @@ import { getStorage } from 'firebase/storage'
 
 // Firebase 설정 (실제 프로젝트의 설정으로 교체하세요)
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "your-api-key",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "your-project.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "your-project-id",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "your-project.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "your-app-id"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCw78LmFKTfoXy9aRPtQEimpHqft-6kdt8",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "sograkkp-b75b9.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "sograkkp-b75b9",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "sograkkp-b75b9.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "12942565193",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:12942565193:web:73e2849f8bc84663548498",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-J8WJWF8CW0"
 }
 
 // Firebase 설정 확인
 const isFirebaseConfigured = 
+  firebaseConfig.apiKey &&
   firebaseConfig.apiKey !== "your-api-key" &&
+  firebaseConfig.projectId &&
   firebaseConfig.projectId !== "your-project-id" &&
+  firebaseConfig.authDomain &&
   firebaseConfig.authDomain !== "your-project.firebaseapp.com"
 
 // 디버깅: 환경 변수 로드 확인

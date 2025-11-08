@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { LoadScript, GoogleMap, Marker, InfoWindow } from '@react-google-maps/api'
+import { useLoadScript, GoogleMap, Marker, InfoWindow } from '@react-google-maps/api'
 
 const containerStyle = {
   width: '100%',
@@ -127,7 +127,12 @@ function MapView() {
   const mapRef = useRef(null)
 
   const categories = ['전체', '문화', '경제', '안전', '환경']
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM"
+
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: apiKey,
+    libraries: ['places']
+  })
 
   const filteredPosts = selectedCategory === '전체'
     ? mapPosts
@@ -156,6 +161,34 @@ function MapView() {
     )
   }
 
+  // 로딩 중일 때
+  if (!isLoaded) {
+    return (
+      <div className="relative h-[calc(100vh-200px)] min-h-[500px] bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-spin">🗺️</div>
+          <p className="text-gray-600">지도를 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 에러가 발생했을 때
+  if (loadError) {
+    console.error('Google Maps 로드 에러:', loadError)
+    return (
+      <div className="relative h-[calc(100vh-200px)] min-h-[500px] bg-gray-100 flex items-center justify-center">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
+          <div className="text-4xl mb-4">⚠️</div>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">지도를 불러올 수 없습니다</h3>
+          <p className="text-gray-600 mb-4">
+            {loadError.message || 'Google Maps API 키를 확인해주세요.'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative">
       {/* 카테고리 필터 (지도 위) */}
@@ -176,79 +209,72 @@ function MapView() {
       </div>
 
       {/* Google Maps */}
-      <LoadScript 
-        googleMapsApiKey={apiKey}
-        onError={(error) => {
-          console.error('Google Maps 로드 에러:', error)
-          setMapError('지도를 불러오는 중 오류가 발생했습니다.')
+      <GoogleMap
+        mapContainerStyle={containerStyle}
+        options={mapOptions}
+        onLoad={(map) => {
+          mapRef.current = map
         }}
       >
-        <GoogleMap
-          mapContainerStyle={containerStyle}
-          options={mapOptions}
-          onLoad={(map) => {
-            mapRef.current = map
-          }}
-        >
-          {filteredPosts.map((post) => {
-            // SVG 아이콘 생성
-            const svgIcon = `data:image/svg+xml;base64,${btoa(`
-              <svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="20" cy="20" r="18" fill="${post.color}" stroke="white" stroke-width="3"/>
-                <text x="20" y="28" font-size="20" text-anchor="middle" fill="white">${post.emoji}</text>
-              </svg>
-            `)}`
-            
-            return (
-              <Marker
-                key={post.id}
-                position={{ lat: post.lat, lng: post.lng }}
-                icon={{
-                  url: svgIcon,
-                  scaledSize: { width: 40, height: 40 },
-                  anchor: { x: 20, y: 20 }
-                }}
-                onClick={() => setSelectedPost(post)}
-              />
-            )
-          })}
+        {filteredPosts.map((post) => {
+          // SVG 아이콘 생성 (이모지 지원을 위해 encodeURIComponent 사용)
+          const svgString = `
+            <svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="20" cy="20" r="18" fill="${post.color}" stroke="white" stroke-width="3"/>
+              <text x="20" y="28" font-size="20" text-anchor="middle" fill="white">${post.emoji}</text>
+            </svg>
+          `.trim()
+          const svgIcon = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`
+          
+          return (
+            <Marker
+              key={post.id}
+              position={{ lat: post.lat, lng: post.lng }}
+              icon={{
+                url: svgIcon,
+                scaledSize: { width: 40, height: 40 },
+                anchor: { x: 20, y: 20 }
+              }}
+              onClick={() => setSelectedPost(post)}
+            />
+          )
+        })}
 
-          {selectedPost && (
-            <InfoWindow
-              position={{ lat: selectedPost.lat, lng: selectedPost.lng }}
-              onCloseClick={() => setSelectedPost(null)}
-            >
-              <div className="p-2 min-w-[200px]">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">{selectedPost.emoji}</span>
-                  <div>
-                    <h3 className="font-bold text-gray-800 text-sm">{selectedPost.title}</h3>
-                    <div className="text-xs" style={{ color: selectedPost.color }}>
-                      {selectedPost.categoryGroup}
-                    </div>
+        {selectedPost && (
+          <InfoWindow
+            position={{ lat: selectedPost.lat, lng: selectedPost.lng }}
+            onCloseClick={() => setSelectedPost(null)}
+          >
+            <div className="p-2 min-w-[200px]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">{selectedPost.emoji}</span>
+                <div>
+                  <h3 className="font-bold text-gray-800 text-sm">{selectedPost.title}</h3>
+                  <div className="text-xs" style={{ color: selectedPost.color }}>
+                    {selectedPost.categoryGroup}
                   </div>
                 </div>
-                <p className="text-xs text-gray-600 mb-2">{selectedPost.info}</p>
-                <div className="text-xs text-gray-500 mb-2">📍 {selectedPost.location}</div>
-                <div className="flex gap-3 text-xs text-gray-500 mb-3">
-                  <span>❤️ {selectedPost.likes}</span>
-                  <span>💬 {selectedPost.comments}</span>
-                  <span>👁️ {selectedPost.views}</span>
-                </div>
-                <button
-                  onClick={() => {
-                    alert(`${selectedPost.title} 상세보기 클릭!`)
-                    setSelectedPost(null)
-                  }}
-                  className="w-full bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-blue-600 transition"
-                >
-                  자세히 보기
-                </button>
               </div>
-            </InfoWindow>
-          )}
-        </GoogleMap>
-      </LoadScript>
+              <p className="text-xs text-gray-600 mb-2">{selectedPost.info}</p>
+              <div className="text-xs text-gray-500 mb-2">📍 {selectedPost.location}</div>
+              <div className="flex gap-3 text-xs text-gray-500 mb-3">
+                <span>❤️ {selectedPost.likes}</span>
+                <span>💬 {selectedPost.comments}</span>
+                <span>👁️ {selectedPost.views}</span>
+              </div>
+              <button
+                onClick={() => {
+                  alert(`${selectedPost.title} 상세보기 클릭!`)
+                  setSelectedPost(null)
+                }}
+                className="w-full bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-blue-600 transition"
+              >
+                자세히 보기
+              </button>
+            </div>
+          </InfoWindow>
+        )}
+      </GoogleMap>
       
       {mapError && (
         <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-20 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
