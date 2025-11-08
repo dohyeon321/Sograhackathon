@@ -30,10 +30,12 @@ function HotIssueBanner({ onPostClick, refreshTrigger }) {
         
         const postsData = querySnapshot.docs.map(doc => {
           const data = doc.data()
+          const content = data.content || ''
           return {
             id: doc.id,
             ...data,
-            emoji: CATEGORY_EMOJI[data.category] || '📝'
+            emoji: CATEGORY_EMOJI[data.category] || '📝',
+            excerpt: content.length > 90 ? `${content.slice(0, 90)}...` : content
           }
         })
         
@@ -47,10 +49,12 @@ function HotIssueBanner({ onPostClick, refreshTrigger }) {
           
           const allPosts = allPostsSnapshot.docs.map(doc => {
             const data = doc.data()
+            const content = data.content || ''
             return {
               id: doc.id,
               ...data,
-              emoji: CATEGORY_EMOJI[data.category] || '📝'
+              emoji: CATEGORY_EMOJI[data.category] || '📝',
+              excerpt: content.length > 90 ? `${content.slice(0, 90)}...` : content
             }
           })
           
@@ -77,42 +81,75 @@ function HotIssueBanner({ onPostClick, refreshTrigger }) {
   }
 
   return (
-    <div className="bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg font-bold">🔥 핫이슈</span>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            {hotPosts.map((post, index) => (
-              <div
-                key={post.id}
-                onClick={() => {
-                  if (onPostClick) {
-                    onPostClick(post.id)
-                  }
-                }}
-                className="bg-white/20 backdrop-blur-sm rounded-lg p-3 cursor-pointer hover:bg-white/30 transition"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold bg-white/30 px-2 py-0.5 rounded">
-                    {index + 1}위
-                  </span>
-                  <span className="text-lg">{post.emoji}</span>
-                  <span className="text-xs text-white/90">{post.category}</span>
-                </div>
-                <h4 className="font-semibold text-sm mb-1 line-clamp-1">{post.title}</h4>
-                <div className="flex items-center gap-2 text-xs text-white/80">
-                  <span>👁️ {post.views || 0}</span>
-                  <span>❤️ {post.likes || 0}</span>
-                  <span>💬 {post.comments || 0}</span>
+    <section className="px-6">
+      <div className="mx-auto max-w-7xl">
+        <div
+          className="relative overflow-hidden rounded-[34px] border border-white/40 bg-gradient-to-br from-blue-500/95 via-sky-500/90 to-indigo-500/90 shadow-[0_35px_65px_-45px_rgba(15,23,42,0.8)]"
+          style={{
+            backgroundImage:
+              "linear-gradient(120deg, rgba(37, 99, 235, 0.88), rgba(14, 116, 144, 0.68)), url('https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?auto=format&fit=crop&w=1600&q=80')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-sky-900/40 via-blue-900/20 to-sky-800/30" />
+          <div className="relative z-10 px-8 py-10 text-white">
+            <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.4em] text-white/60">Hot Topic</p>
+                <h2 className="mt-2 text-3xl font-bold md:text-4xl">
+                  대전 · 충청 지역에서 지금 가장 뜨거운 이야기
+                </h2>
+                <p className="mt-3 max-w-2xl text-base text-white/80">
+                  현지인들이 주목한 로컬 뉴스와 이야기를 한눈에 살펴보세요. 인기 있는 소식일수록 더 많은 혜택과 정보를 빠르게 받아볼 수 있어요.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 rounded-full border border-white/40 bg-white/15 px-4 py-2 text-sm text-white/90 backdrop-blur">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-xl">🔥</span>
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-white/70">Weekly Ranking</p>
+                  <p className="text-sm font-semibold">실시간 인기 Top 3</p>
                 </div>
               </div>
-            ))}
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              {hotPosts.map((post, index) => (
+                <button
+                  key={post.id}
+                  onClick={() => onPostClick && onPostClick(post.id)}
+                  className="group flex h-full flex-col justify-between overflow-hidden rounded-3xl border border-white/30 bg-white/20 p-5 text-left transition hover:-translate-y-1 hover:bg-white/30"
+                >
+                  <div>
+                    <div className="flex items-center gap-3 text-sm font-semibold text-white/90">
+                      <span className="flex items-center gap-1 rounded-full bg-white/30 px-3 py-1 text-xs font-semibold text-white">
+                        TOP {index + 1}
+                      </span>
+                      <span className="text-lg">{post.emoji}</span>
+                      <span className="text-xs uppercase tracking-wide text-white/70">{post.category}</span>
+                    </div>
+                    <h3 className="mt-4 line-clamp-2 text-lg font-bold leading-snug text-white">
+                      {post.title}
+                    </h3>
+                    <p className="mt-2 line-clamp-3 text-sm text-white/80">
+                      {post.excerpt || '지금 지역민들이 가장 많이 찾는 정보를 확인해보세요.'}
+                    </p>
+                  </div>
+                  <div className="mt-6 flex items-center justify-between text-xs text-white/80">
+                    <span className="flex items-center gap-1">👁️ {post.views || 0}</span>
+                    <span className="flex items-center gap-1">❤️ {post.likes || 0}</span>
+                    <span className="flex items-center gap-1">💬 {post.comments || 0}</span>
+                    <span className="flex items-center gap-1 font-medium text-white">
+                      자세히 보기 →
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 

@@ -91,28 +91,37 @@ function App() {
 
   return (
     <AuthProvider>
-      <div className="min-h-screen bg-gray-50">
+      <div className="relative min-h-screen overflow-hidden">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute inset-x-[-20%] top-[-280px] h-[520px] bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700" />
+          <div className="absolute -top-32 left-1/4 h-72 w-72 rounded-full bg-blue-300/40 blur-3xl" />
+          <div className="absolute -top-16 right-1/3 h-80 w-80 rounded-full bg-sky-200/30 blur-3xl" />
+          <div className="absolute top-72 left-12 h-56 w-56 rounded-full bg-indigo-200/30 blur-3xl" />
+        </div>
+
         {currentPage !== 'postDetail' && currentPage !== 'userProfile' && currentPage !== 'write' && (
-          <>
-            <Header 
-              onWriteClick={handleWriteClick} 
+          <div className="relative z-10">
+            <Header
+              onWriteClick={handleWriteClick}
               onProfileClick={handleProfileClick}
               onLoginClick={handleLoginClick}
             />
-            <HotIssueBanner 
-              onPostClick={handlePostClick}
-              refreshTrigger={refreshTrigger}
-            />
-            <RegionNewsBanner />
-            <div ref={tabNavigationRef}>
+            <div className="space-y-12 pb-16">
+              <HotIssueBanner
+                onPostClick={handlePostClick}
+                refreshTrigger={refreshTrigger}
+              />
+              <RegionNewsBanner />
+            </div>
+            <div ref={tabNavigationRef} className="relative z-20">
               <TabNavigation activeTab={activeTab} setActiveTab={handleTabChange} />
             </div>
-          </>
+          </div>
         )}
-        
+
         {currentPage === 'board' && (
-          <BoardPage 
-            refreshTrigger={refreshTrigger} 
+          <BoardPage
+            refreshTrigger={refreshTrigger}
             onWriteClick={handleWriteClick}
             onPostClick={handlePostClick}
           />
@@ -144,9 +153,9 @@ function App() {
             editPostData={editPostData}
           />
         )}
-        
-        <AuthPage 
-          isOpen={showAuthModal} 
+
+        <AuthPage
+          isOpen={showAuthModal}
           onClose={handleAuthClose}
         />
       </div>

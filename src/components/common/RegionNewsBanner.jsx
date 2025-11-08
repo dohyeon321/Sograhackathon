@@ -83,16 +83,17 @@ function RegionNewsBanner() {
 
   if (!currentItem) {
     return (
-      <div className="bg-gray-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-4">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold">📰 대전 충청 소식</span>
-              <span className="text-sm text-white/80">(준비 중)</span>
+      <section className="px-6">
+        <div className="mx-auto max-w-7xl">
+          <div className="rounded-[30px] border border-white/60 bg-white/70 px-8 py-10 text-slate-600 shadow-[0_30px_60px_-45px_rgba(15,23,42,0.35)] backdrop-blur">
+            <div className="flex items-center gap-3 text-lg font-semibold">
+              <span className="text-2xl">📰</span>
+              <span>대전 충청 소식이 곧 업데이트될 예정입니다.</span>
             </div>
+            <p className="mt-2 text-sm text-slate-500">생생한 지역 축제와 날씨 소식을 준비하고 있어요.</p>
           </div>
         </div>
-      </div>
+      </section>
     )
   }
 
@@ -107,57 +108,78 @@ function RegionNewsBanner() {
   }
 
   return (
-    <div className="bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6 py-5">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg p-5">
-          <div 
+    <section className="px-6">
+      <div className="mx-auto max-w-7xl">
+        <div className="relative overflow-hidden rounded-[32px] border border-white/60 bg-white/75 px-8 py-9 text-slate-800 shadow-[0_38px_65px_-45px_rgba(15,23,42,0.45)] backdrop-blur-xl">
+          <div className="pointer-events-none absolute -top-28 right-0 h-56 w-56 rounded-full bg-sky-200/40 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-32 left-20 h-64 w-64 rounded-full bg-blue-200/35 blur-3xl" />
+
+          <div
             onClick={handleItemClick}
-            className={`flex items-center justify-between ${currentItem.url ? 'cursor-pointer hover:opacity-90 transition' : ''}`}
+            className={`relative z-10 flex flex-col gap-8 md:flex-row md:items-center md:justify-between ${
+              currentItem.url ? 'cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-sky-200/60' : ''
+            }`}
           >
-            <div className="flex items-center gap-4 flex-1">
-              <span className="text-4xl">{currentItem.type === 'weather' ? currentItem.emoji : currentItem.emoji}</span>
+            <div className="flex flex-1 items-center gap-6">
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500/90 to-blue-600/90 text-4xl text-white shadow-lg">
+                {currentItem.emoji}
+              </div>
               <div className="flex-1">
                 {currentItem.type === 'weather' ? (
-                  <>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xl font-bold">대전 날씨</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-blue-500">
+                      Weather
+                      <span className="hidden rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-600 sm:inline-block">
+                        대전
+                      </span>
                     </div>
-                    <div className="text-base text-white/90">
-                      {currentItem.temp}°C • {currentItem.description}
-                    </div>
-                  </>
+                    <h3 className="text-2xl font-bold text-slate-800">대전 오늘의 하늘</h3>
+                    <p className="text-lg text-slate-600">
+                      {currentItem.temp}°C · {currentItem.description}
+                    </p>
+                  </div>
                 ) : (
-                  <>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xl font-bold">{currentItem.title}</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.25em] text-blue-500">
+                      Festival &amp; Event
                     </div>
-                    <div className="text-base text-white/90">
-                      {currentItem.date} • {currentItem.location}
-                    </div>
-                  </>
+                    <h3 className="text-2xl font-bold text-slate-800">{currentItem.title}</h3>
+                    <p className="text-base text-slate-600">
+                      {currentItem.date} · {currentItem.location}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
-            {/* 인디케이터 */}
-            <div className="flex items-center gap-2 ml-4">
-              {items.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleIndicatorClick(index)
-                  }}
-                  className={`w-3 h-3 rounded-full transition ${
-                    index === currentIndex ? 'bg-white' : 'bg-white/40 hover:bg-white/60'
-                  }`}
-                  aria-label={`${index + 1}번째 항목으로 이동`}
-                />
-              ))}
+
+            <div className="flex items-center gap-3 self-start rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 md:self-center">
+              <span className="hidden text-xs uppercase tracking-[0.3em] text-slate-400 sm:inline-block">Now</span>
+              <span className="text-slate-700">{currentIndex + 1}</span>
+              <span className="text-slate-400">/</span>
+              <span className="text-slate-500">{items.length}</span>
             </div>
+          </div>
+
+          <div className="relative z-10 mt-6 flex items-center gap-2">
+            {items.map((_, index) => (
+              <button
+                key={index}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleIndicatorClick(index)
+                }}
+                className={`h-2.5 rounded-full transition-all ${
+                  index === currentIndex
+                    ? 'w-12 bg-gradient-to-r from-sky-500 to-blue-500 shadow-sm'
+                    : 'w-6 bg-slate-200 hover:bg-slate-300'
+                }`}
+                aria-label={`${index + 1}번째 항목으로 이동`}
+              />
+            ))}
           </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 

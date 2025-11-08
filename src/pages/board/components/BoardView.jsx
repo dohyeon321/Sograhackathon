@@ -47,19 +47,18 @@ function BoardView({ selectedCategory, refreshTrigger, onPostClick }) {
       
       const postsData = querySnapshot.docs.map(doc => {
         const data = doc.data()
+        const content = data.content || ''
         return {
           id: doc.id,
           ...data,
           author: data.authorName || data.author || '익명',
           emoji: CATEGORY_EMOJI[data.category] || '📝',
           timeAgo: formatTimeAgo(data.createdAt),
-          excerpt: data.content?.substring(0, 100) + '...' || '',
+          excerpt: content ? (content.length > 100 ? `${content.slice(0, 100)}...` : content) : '',
           isLocal: true
         }
       })
-      
-      console.log('전체 게시물 수:', postsData.length)
-      
+
       setPosts(postsData)
     } catch (err) {
       console.error('게시물 불러오기 에러:', err)
@@ -78,45 +77,63 @@ function BoardView({ selectedCategory, refreshTrigger, onPostClick }) {
     ? posts 
     : posts.filter(post => post.category === selectedCategory)
 
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-          <p className="mt-4 text-gray-600">게시물을 불러오는 중...</p>
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-4 py-16 text-slate-500">
+          <div className="h-12 w-12 animate-spin rounded-full border-2 border-blue-200 border-t-blue-500"></div>
+          <p className="text-sm font-medium">지역 소식을 불러오는 중입니다...</p>
         </div>
-      </div>
-    )
-  }
+      )
+    }
 
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="text-center py-12">
-          <p className="text-red-500">{error}</p>
+    if (error) {
+      return (
+        <div className="py-16 text-center">
+          <p className="text-sm font-semibold text-red-500">{error}</p>
         </div>
-      </div>
-    )
-  }
+      )
+    }
 
-  if (filteredPosts.length === 0) {
-    return (
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="text-center py-12">
-          <p className="text-gray-500">게시물이 없습니다.</p>
+    if (filteredPosts.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-500">
+          <span className="text-4xl">🔎</span>
+          <p className="text-sm font-medium">아직 등록된 게시물이 없습니다. 첫 번째 이야기를 남겨보세요!</p>
         </div>
+      )
+    }
+
+    return (
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {filteredPosts.map((post) => (
+          <PostCard key={post.id} post={post} onClick={onPostClick} />
+        ))}
       </div>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPosts.map((post) => (
-          <PostCard key={post.id} post={post} onClick={onPostClick} />
-        ))}
+    <section className="px-6 pb-16">
+      <div className="mx-auto max-w-7xl">
+        <div className="rounded-[36px] border border-white/65 bg-white/80 px-6 py-8 shadow-[0_35px_70px_-45px_rgba(15,23,42,0.45)] backdrop-blur-xl">
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-2xl font-bold text-slate-800">로컬 커뮤니티 게시판</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                실시간으로 업데이트되는 대전 · 충청 로컬 스토리를 확인해보세요.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">
+              <span className="text-xs uppercase tracking-[0.35em] text-slate-400">Post</span>
+              <span>{filteredPosts.length}</span>
+            </div>
+          </div>
+
+          {renderContent()}
+        </div>
       </div>
-    </div>
+    </section>
   )
 }
 
