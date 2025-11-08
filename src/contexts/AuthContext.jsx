@@ -65,17 +65,46 @@ export function AuthProvider({ children }) {
       })
 
       // Firestore에 사용자 정보 저장
+      if (!db) {
+        await signOut(auth)
+        return {
+          success: false,
+          error: 'Firestore가 초기화되지 않았습니다. 서버를 재시작해주세요.'
+        }
+      }
+
       const userData = {
         uid: user.uid,
         email: user.email,
         displayName: displayName,
-        region: region,
-        isLocal: isLocal,
+        region: region || '',
+        isLocal: isLocal || false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }
 
-      await setDoc(doc(db, 'users', user.uid), userData)
+      try {
+        console.log('Firestore 저장 시도:', user.uid, userData)
+        await setDoc(doc(db, 'users', user.uid), userData)
+        console.log('Firestore 사용자 데이터 저장 성공:', user.uid)
+        
+        // 저장 확인
+        const savedDoc = await getDoc(doc(db, 'users', user.uid))
+        if (savedDoc.exists()) {
+          console.log('Firestore 저장 확인 완료:', savedDoc.data())
+        } else {
+          console.error('Firestore 저장 확인 실패: 문서가 존재하지 않음')
+        }
+      } catch (firestoreError) {
+        console.error('Firestore 저장 실패:', firestoreError)
+        console.error('Firestore 에러 코드:', firestoreError.code)
+        console.error('Firestore 에러 메시지:', firestoreError.message)
+        await signOut(auth)
+        return {
+          success: false,
+          error: `사용자 데이터 저장 중 오류가 발생했습니다: ${firestoreError.message || firestoreError.code || '알 수 없는 오류'}`
+        }
+      }
 
       return { success: true }
     } catch (error) {

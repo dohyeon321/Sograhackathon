@@ -3,12 +3,25 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // 사용자 데이터 규칙
     match /users/{userId} {
-      // 본인만 읽기/쓰기 가능
+      // 본인만 읽기 가능
       allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
       
-      // 회원가입 시에만 생성 가능
-      allow create: if request.auth != null && request.auth.uid == userId;
+      // 회원가입 시에만 생성 가능 (이메일 인증 전에도 임시 저장 허용)
+      allow create: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string
+        && (!request.resource.data.hasAll(['region']) || request.resource.data.region is string) // region은 선택사항, 문자열 타입
+        && (!request.resource.data.hasAll(['isLocal']) || request.resource.data.isLocal is bool) // isLocal은 선택사항, boolean 타입
+        && (!request.resource.data.hasAll(['createdAt']) || request.resource.data.createdAt is timestamp) // createdAt은 선택사항, timestamp 타입
+        && (!request.resource.data.hasAll(['updatedAt']) || request.resource.data.updatedAt is timestamp); // updatedAt은 선택사항, timestamp 타입
+      
+      // 본인만 수정 가능
+      allow update: if request.auth != null && request.auth.uid == userId;
+      
+      // 본인만 삭제 가능
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
     
     // 게시물 규칙
