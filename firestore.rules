@@ -3,12 +3,23 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // 사용자 데이터 규칙
     match /users/{userId} {
-      // 본인만 읽기/쓰기 가능
+      // 본인만 읽기 가능
       allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
       
-      // 회원가입 시에만 생성 가능
-      allow create: if request.auth != null && request.auth.uid == userId;
+      // 회원가입 시에만 생성 가능 (이메일 인증 전에도 임시 저장 허용)
+      allow create: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string;
+      
+      // 본인만 수정 가능 (이메일 인증 완료 후 회원가입 완료 처리 포함)
+      allow update: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId;
+      
+      // 본인만 삭제 가능
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
     
     // 게시물 규칙

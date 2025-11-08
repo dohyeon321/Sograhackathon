@@ -4,7 +4,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
+  sendEmailVerification
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db, isFirebaseConfigured } from '../firebase/config'
@@ -64,26 +65,51 @@ export function AuthProvider({ children }) {
         displayName: displayName
       })
 
-      // Firestore에 사용자 정보 저장
+      // 이메일 인증 링크 전송
+      try {
+        await sendEmailVerification(user, {
+          url: window.location.origin, // 인증 후 리다이렉트 URL
+          handleCodeInApp: false // 이메일 링크로 직접 인증
+        })
+      } catch (emailError) {
+        console.error('이메일 인증 링크 전송 실패:', emailError)
+        // 이메일 전송 실패해도 계정은 생성됨
+      }
+
+      // Firestore에 임시 사용자 정보 저장 (이메일 인증 완료 전까지)
+      // 로그아웃 전에 저장해야 권한이 있음
       const userData = {
         uid: user.uid,
         email: user.email,
         displayName: displayName,
         region: region,
         isLocal: isLocal,
+        emailVerified: false, // 이메일 인증 상태
+        signupCompleted: false, // 회원가입 완료 여부 (이메일 인증 완료 시 true)
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       }
 
-      await setDoc(doc(db, 'users', user.uid), userData)
+      try {
+        await setDoc(doc(db, 'users', user.uid), userData)
+      } catch (firestoreError) {
+        console.error('Firestore 저장 실패:', firestoreError)
+        // Firestore 저장 실패해도 계정은 생성되었으므로 계속 진행
+        // 이메일 인증 완료 후 다시 저장 시도
+      }
 
-      return { success: true }
+      // 회원가입 후 즉시 로그아웃 (이메일 인증 완료 전까지 로그인 방지)
+      await signOut(auth)
+
+      return { success: true, emailSent: true }
     } catch (error) {
       console.error('회원가입 에러:', error)
       let errorMessage = '회원가입 중 오류가 발생했습니다.'
 
       if (error.code === 'auth/email-already-in-use') {
-        errorMessage = '이미 사용 중인 이메일입니다.'
+        // 이메일이 이미 사용 중인 경우, 이메일 인증 완료 여부 확인
+        // 인증되지 않은 계정이면 안내 메시지 표시
+        errorMessage = '이미 사용 중인 이메일입니다. 이메일 인증을 완료하지 않은 경우 이메일을 확인하여 인증을 완료해주세요.'
       } else if (error.code === 'auth/weak-password') {
         errorMessage = '비밀번호가 너무 약합니다.'
       } else if (error.code === 'auth/invalid-email') {
@@ -118,7 +144,18 @@ export function AuthProvider({ children }) {
       }
 
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
-      return { success: true, user: userCredential.user }
+      const user = userCredential.user
+
+      // 이메일 인증이 완료되지 않은 경우 로그인 불가
+      if (!user.emailVerified) {
+        await signOut(auth)
+        return {
+          success: false,
+          error: '이메일 인증이 완료되지 않았습니다. 이메일을 확인하여 인증을 완료해주세요.'
+        }
+      }
+
+      return { success: true, user: user }
     } catch (error) {
       console.error('로그인 에러:', error)
       let errorMessage = '로그인 중 오류가 발생했습니다.'
@@ -206,6 +243,49 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // 이메일 인증 링크 재전송
+  async function resendEmailVerification(email, password) {
+    try {
+      if (!auth) {
+        return { success: false, error: 'Firebase가 초기화되지 않았습니다.' }
+      }
+
+      // 임시 로그인하여 인증 링크 전송
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
+
+      // 이미 인증된 경우
+      if (user.emailVerified) {
+        await signOut(auth)
+        return { success: false, error: '이미 인증된 이메일입니다.' }
+      }
+
+      // 이메일 인증 링크 전송
+      await sendEmailVerification(user, {
+        url: window.location.origin,
+        handleCodeInApp: false
+      })
+
+      // 로그아웃
+      await signOut(auth)
+
+      return { success: true }
+    } catch (error) {
+      console.error('이메일 인증 링크 재전송 에러:', error)
+      let errorMessage = '이메일 인증 링크 재전송 중 오류가 발생했습니다.'
+
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = '등록되지 않은 이메일입니다.'
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = '비밀번호가 올바르지 않습니다.'
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = '너무 많은 요청이 있었습니다. 잠시 후 다시 시도해주세요.'
+      }
+
+      return { success: false, error: errorMessage }
+    }
+  }
+
   // 인증 상태 변경 감지
   useEffect(() => {
     if (!auth) {
@@ -217,24 +297,64 @@ export function AuthProvider({ children }) {
       setCurrentUser(user)
 
       if (user) {
-        let data = null
-        try {
-          data = await fetchUserData(user.uid)
-        } catch (e) {
-          console.warn('fetchUserData 실패:', e)
-        }
+        // 이메일 인증이 완료되었는지 확인
+        if (user.emailVerified) {
+          // 이메일 인증 완료 - Firestore에서 사용자 정보 확인
+          let data = null
+          try {
+            data = await fetchUserData(user.uid)
+          } catch (e) {
+            console.warn('fetchUserData 실패:', e)
+          }
 
-        if (!data) {
-          // Fallback — Firestore 데이터 없으면 최소 기본정보
-          data = {
-            displayName: user.displayName || user.email?.split('@')[0] || '사용자',
-            email: user.email,
-            region: '',
-            isLocal: false,
+          // 이메일 인증이 완료되었지만 회원가입이 완료되지 않은 경우
+          if (data && !data.signupCompleted) {
+            // 회원가입 완료 처리
+            try {
+              await setDoc(doc(db, 'users', user.uid), {
+                ...data,
+                emailVerified: true,
+                signupCompleted: true,
+                updatedAt: serverTimestamp()
+              }, { merge: true })
+              
+              // 사용자 데이터 새로고침
+              data = await fetchUserData(user.uid)
+              
+              // 회원가입 완료 후 자동 로그아웃하여 로그인 화면으로 이동
+              // 약간의 지연을 두어 사용자에게 완료 메시지를 볼 수 있게 함
+              setTimeout(async () => {
+                await signOut(auth)
+                setUserData(null)
+                setCurrentUser(null)
+              }, 2000) // 2초 후 로그아웃
+            } catch (e) {
+              console.error('회원가입 완료 처리 실패:', e)
+            }
+          }
+
+          if (!data) {
+            // Fallback — Firestore 데이터 없으면 최소 기본정보
+            data = {
+              displayName: user.displayName || user.email?.split('@')[0] || '사용자',
+              email: user.email,
+              region: '',
+              isLocal: false,
+            }
+          }
+
+          setUserData(data)
+        } else {
+          // 이메일 인증이 완료되지 않은 경우 - 로그인 불가
+          // 로그아웃 처리
+          try {
+            await signOut(auth)
+            setUserData(null)
+            setCurrentUser(null)
+          } catch (e) {
+            console.error('로그아웃 실패:', e)
           }
         }
-
-        setUserData(data)
       } else {
         // user가 null인 경우 (로그아웃 상태)
         setUserData(null)
@@ -254,6 +374,7 @@ export function AuthProvider({ children }) {
     login,
     logout,
     refreshUserData,
+    resendEmailVerification,
     loading
   }
 
