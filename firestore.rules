@@ -33,17 +33,19 @@ service cloud.firestore {
         && request.resource.data.location.size() <= 200
         && request.resource.data.likes is int
         && request.resource.data.comments is int
-        && request.resource.data.views is int;
+        && request.resource.data.views is int
+        && (!request.resource.data.hasAll(['authorIsLocal']) || request.resource.data.authorIsLocal is bool); // 작성자의 로컬 인증 여부 (선택사항, boolean 타입)
       
       // 게시물 수정은 작성자만 가능
       // 작성자가 수정할 때: title, content, category, location, locationAlias, locationLat, locationLng, images, updatedAt만 수정 가능
-      // authorId, authorName, authorRegion, likes, comments, views, createdAt은 수정 불가 (보안 강화)
+      // authorId, authorName, authorRegion, authorIsLocal, likes, comments, views, createdAt은 수정 불가 (보안 강화)
       // 단, views, likes, comments 필드는 increment()로만 수정 가능 (조회수/좋아요/댓글 수 증가용)
       allow update: if (request.auth != null && request.auth.uid == resource.data.authorId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'location', 'locationAlias', 'locationLat', 'locationLng', 'images', 'updatedAt'])
         && (!request.resource.data.hasAll(['authorId']) || request.resource.data.authorId == resource.data.authorId) // 작성자 ID 변경 방지 (필드가 없거나 기존 값과 동일)
         && (!request.resource.data.hasAll(['authorName']) || request.resource.data.authorName == resource.data.authorName) // 작성자 이름 변경 방지 (필드가 없거나 기존 값과 동일)
         && (!request.resource.data.hasAll(['authorRegion']) || request.resource.data.authorRegion == resource.data.authorRegion) // 작성자 지역 변경 방지 (필드가 없거나 기존 값과 동일)
+        && (!request.resource.data.hasAll(['authorIsLocal']) || request.resource.data.authorIsLocal == resource.data.authorIsLocal) // 작성자 로컬 인증 여부 변경 방지 (필드가 없거나 기존 값과 동일)
         && (!request.resource.data.hasAll(['likes']) || request.resource.data.likes == resource.data.likes) // 좋아요 수 직접 변경 방지 (필드가 없거나 기존 값과 동일)
         && (!request.resource.data.hasAll(['comments']) || request.resource.data.comments == resource.data.comments) // 댓글 수 직접 변경 방지 (필드가 없거나 기존 값과 동일)
         && (!request.resource.data.hasAll(['views']) || request.resource.data.views == resource.data.views) // 조회수 직접 변경 방지 (필드가 없거나 기존 값과 동일)
@@ -70,13 +72,18 @@ service cloud.firestore {
         && request.auth.uid == request.resource.data.userId
         && request.resource.data.postId is string
         && request.resource.data.content is string
-        && request.resource.data.content.size() <= 500; // 댓글 길이 제한
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 500
+        && request.resource.data.userName is string
+        && request.resource.data.userName.size() > 0
+        && (!request.resource.data.hasAll(['userEmail']) || request.resource.data.userEmail is string);
       // 댓글 수정/삭제는 작성자만 가능
       // 수정 시 content와 updatedAt만 수정 가능 (보안 강화)
       allow update: if request.auth != null 
         && request.auth.uid == resource.data.userId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'updatedAt'])
         && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
         && request.resource.data.content.size() <= 500;
       allow delete: if request.auth != null 
         && request.auth.uid == resource.data.userId;
@@ -92,6 +99,47 @@ service cloud.firestore {
         && request.resource.data.postId is string;
       allow delete: if request.auth != null 
         && request.auth.uid == resource.data.userId;
+    }
+    
+    // 명소 후기 규칙
+    match /attractions/{attractionId}/reviews/{reviewId} {
+      // 모든 사용자가 읽기 가능
+      allow read: if true;
+      // 로컬 인증된 사용자만 후기 작성 가능
+      // 후기 내용은 50-200자 사이
+      allow create: if request.auth != null 
+        && request.auth.uid == request.resource.data.authorId
+        && request.resource.data.content is string
+        && request.resource.data.content.size() >= 50
+        && request.resource.data.content.size() <= 200
+        && request.resource.data.authorName is string;
+      // 후기 수정/삭제는 작성자만 가능
+      allow update: if request.auth != null 
+        && request.auth.uid == resource.data.authorId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'updatedAt'])
+        && request.resource.data.content is string
+        && request.resource.data.content.size() >= 50
+        && request.resource.data.content.size() <= 200;
+      allow delete: if request.auth != null 
+        && request.auth.uid == resource.data.authorId;
+    }
+    
+    // 명소 사진 규칙
+    match /attractions/{attractionId}/photos/{photoId} {
+      // 모든 사용자가 읽기 가능
+      allow read: if true;
+      // 로컬 인증된 사용자만 사진 업로드 가능 (isCover 필드 제거 - 랜덤 선택 방식 사용)
+      allow create: if request.auth != null 
+        && request.auth.uid == request.resource.data.authorId
+        && request.resource.data.imageUrl is string
+        && request.resource.data.authorName is string;
+      // 사진 수정은 작성자만 가능 (updatedAt만 수정 가능)
+      allow update: if request.auth != null 
+        && request.auth.uid == resource.data.authorId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']);
+      // 사진 삭제는 작성자만 가능
+      allow delete: if request.auth != null 
+        && request.auth.uid == resource.data.authorId;
     }
   }
 }

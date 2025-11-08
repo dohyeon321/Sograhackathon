@@ -162,4 +162,3 @@ function RegionNewsBanner() {
 }
 
 export default RegionNewsBanner
-

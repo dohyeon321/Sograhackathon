@@ -6,6 +6,8 @@ import RegionNewsBanner from './components/common/RegionNewsBanner'
 import TabNavigation from './components/common/TabNavigation'
 import BoardPage from './pages/board/BoardPage'
 import MapPage from './pages/map/MapPage'
+import DaejeonChungcheongPage from './pages/spot/DaejeonChungcheongPage'
+import AttractionDetailPage from './pages/spot/AttractionDetailPage'
 import PostDetailPage from './pages/post/PostDetailPage'
 import UserProfilePage from './pages/user/UserProfilePage'
 import WritePage from './pages/write/WritePage'
@@ -13,8 +15,9 @@ import AuthPage from './pages/auth/AuthPage'
 
 function App() {
   const [activeTab, setActiveTab] = useState('board')
-  const [currentPage, setCurrentPage] = useState('board') // board, map, postDetail, userProfile, write, auth
+  const [currentPage, setCurrentPage] = useState('board') // board, map, daejeonChungcheong, attractionDetail, postDetail, userProfile, write, auth
   const [selectedPostId, setSelectedPostId] = useState(null)
+  const [selectedAttraction, setSelectedAttraction] = useState(null) // { region, id }
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [previousPage, setPreviousPage] = useState('board') // 이전 페이지 추적
@@ -73,8 +76,19 @@ function App() {
 
   const handleBack = () => {
     // 이전 페이지로 돌아가기 (지도에서 왔다면 지도로, 게시판에서 왔다면 게시판으로)
+    // 명소 상세 페이지에서 돌아올 때는 목록 페이지 새로고침
+    if (currentPage === 'attractionDetail' && previousPage === 'daejeonChungcheong') {
+      setRefreshTrigger(prev => prev + 1)
+    }
     setCurrentPage(previousPage)
     setSelectedPostId(null)
+    setSelectedAttraction(null)
+  }
+
+  const handleAttractionClick = (region, attractionId) => {
+    setPreviousPage(currentPage)
+    setSelectedAttraction({ region, id: attractionId })
+    setCurrentPage('attractionDetail')
   }
 
   const handleProfileClick = () => {
@@ -92,7 +106,7 @@ function App() {
   return (
     <AuthProvider>
       <div className="min-h-screen bg-gray-50">
-        {currentPage !== 'postDetail' && currentPage !== 'userProfile' && currentPage !== 'write' && (
+        {currentPage !== 'postDetail' && currentPage !== 'userProfile' && currentPage !== 'write' && currentPage !== 'attractionDetail' && (
           <>
             <Header 
               onWriteClick={handleWriteClick} 
@@ -118,6 +132,23 @@ function App() {
           />
         )}
         {currentPage === 'map' && <MapPage onPostClick={handlePostClick} />}
+        {currentPage === 'daejeonChungcheong' && (
+          <DaejeonChungcheongPage 
+            onAttractionClick={handleAttractionClick}
+            refreshTrigger={refreshTrigger}
+          />
+        )}
+        {currentPage === 'attractionDetail' && selectedAttraction && (
+          <AttractionDetailPage
+            region={selectedAttraction.region}
+            attractionId={selectedAttraction.id}
+            onBack={handleBack}
+            onPhotoUploaded={() => {
+              // 사진 업로드 시 목록 페이지 새로고침
+              setRefreshTrigger(prev => prev + 1)
+            }}
+          />
+        )}
         {currentPage === 'postDetail' && (
           <PostDetailPage 
             postId={selectedPostId} 

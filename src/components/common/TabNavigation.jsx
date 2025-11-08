@@ -23,6 +23,16 @@ function TabNavigation({ activeTab, setActiveTab }) {
           >
             지도보기
           </button>
+          <button
+            onClick={() => setActiveTab('daejeonChungcheong')}
+            className={`py-4 px-2 font-medium transition ${
+              activeTab === 'daejeonChungcheong'
+                ? 'text-blue-500 border-b-2 border-blue-500'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            찐명소
+          </button>
         </div>
       </div>
     </nav>
