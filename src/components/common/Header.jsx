@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { useAuth } from '../contexts/AuthContext'
-import LoginModal from './LoginModal'
+import { useAuth } from '../../contexts/AuthContext'
+import LoginModal from '../auth/LoginModal'
 
 function Header({ onWriteClick }) {
   const { currentUser, userData, logout } = useAuth()

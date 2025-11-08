@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { collection, query, orderBy, getDocs } from 'firebase/firestore'
-import { db } from '../firebase/config'
+import { db } from '../../../firebase/config'
 import PostCard from './PostCard'
 
 const CATEGORY_EMOJI = {

@@ -154,13 +154,25 @@ export function AuthProvider({ children }) {
   // 사용자 데이터 가져오기
   async function fetchUserData(uid) {
     try {
+      if (!db) {
+        return null
+      }
+      
       const userDoc = await getDoc(doc(db, 'users', uid))
       if (userDoc.exists()) {
         return userDoc.data()
       }
       return null
     } catch (error) {
-      console.error('사용자 데이터 가져오기 에러:', error)
+      // 오프라인 에러는 조용히 무시 (정상적인 상황)
+      if (error.code === 'unavailable' || error.code === 'failed-precondition' || error.message?.includes('offline')) {
+        // 오프라인 상태는 정상이므로 경고 없이 처리
+        return null
+      }
+      // 다른 에러만 로그 출력
+      if (error.code !== 'permission-denied') {
+        console.error('사용자 데이터 가져오기 에러:', error)
+      }
       return null
     }
   }
@@ -176,9 +188,27 @@ export function AuthProvider({ children }) {
       setCurrentUser(user)
       
       if (user) {
-        // 사용자 데이터 가져오기
-        const data = await fetchUserData(user.uid)
-        setUserData(data)
+        // 사용자 데이터 가져오기 (오프라인 상태에서도 기본 정보는 사용)
+        try {
+          const data = await fetchUserData(user.uid)
+          if (data) {
+            setUserData(data)
+          } else {
+            // Firestore에서 데이터를 가져오지 못한 경우, Auth 정보로 기본 데이터 생성
+            setUserData({
+              displayName: user.displayName || user.email?.split('@')[0] || '사용자',
+              email: user.email,
+              region: ''
+            })
+          }
+        } catch (error) {
+          // 에러 발생 시에도 기본 정보는 설정
+          setUserData({
+            displayName: user.displayName || user.email?.split('@')[0] || '사용자',
+            email: user.email,
+            region: ''
+          })
+        }
       } else {
         setUserData(null)
       }

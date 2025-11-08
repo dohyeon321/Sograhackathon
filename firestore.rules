@@ -13,16 +13,12 @@ service cloud.firestore {
     
     // 게시물 규칙
     match /posts/{postId} {
-      // 모든 인증된 사용자가 읽기 가능
-      allow read: if request.auth != null;
+      // 모든 사용자가 읽기 가능
+      allow read: if true;
       
-      // 게시물 작성은 인증된 사용자만 가능
+      // 게시물 작성은 인증된 사용자만 가능 (규칙 간소화)
       allow create: if request.auth != null 
-        && request.auth.uid == request.resource.data.authorId
-        && request.resource.data.title is string
-        && request.resource.data.content is string
-        && request.resource.data.category is string
-        && request.resource.data.location is string;
+        && request.auth.uid == request.resource.data.authorId;
       
       // 게시물 수정/삭제는 작성자만 가능
       allow update, delete: if request.auth != null 

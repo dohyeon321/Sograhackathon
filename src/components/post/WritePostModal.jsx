@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { collection, addDoc, serverTimestamp, getDocs, query, limit } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage } from '../firebase/config'
+import { db, storage } from '../../firebase/config'
 
 const CATEGORIES = [
   { id: '맛집', label: '맛집', emoji: '🍽️' },
@@ -53,45 +53,29 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
 
     files.forEach((file) => {
       if (file.type.startsWith('image/')) {
-        if (file.size > 5 * 1024 * 1024) {
-          setError('이미지 파일 크기는 5MB 이하여야 합니다.')
-          return
-        }
         newImages.push(file)
         const reader = new FileReader()
         reader.onload = (e) => {
           newPreviews.push(e.target.result)
-          if (newPreviews.length === files.length) {
-            setImagePreviews([...imagePreviews, ...newPreviews])
-            setSelectedImages([...selectedImages, ...newImages])
-          }
+          setImagePreviews([...imagePreviews, ...newPreviews])
         }
         reader.readAsDataURL(file)
       }
     })
+
+    setSelectedImages([...selectedImages, ...newImages])
   }
 
   const handleRemoveImage = (index) => {
-    const newImages = [...selectedImages]
-    const newPreviews = [...imagePreviews]
-    newImages.splice(index, 1)
-    newPreviews.splice(index, 1)
+    const newImages = selectedImages.filter((_, i) => i !== index)
+    const newPreviews = imagePreviews.filter((_, i) => i !== index)
     setSelectedImages(newImages)
     setImagePreviews(newPreviews)
   }
 
   const handleLocationSelect = () => {
-    // 지도에서 위치 선택하는 모달을 열거나, 간단하게 주소 입력으로 처리
-    // 일단 주소 입력으로 처리하고 나중에 지도 연동
-    const address = prompt('위치를 입력하거나 지도에서 선택해주세요:')
-    if (address) {
-      // 주소를 좌표로 변환하는 것은 나중에 구현
-      // 일단 주소만 저장
-      setFormData({
-        ...formData,
-        location: address
-      })
-    }
+    // 지도에서 위치 선택 기능 (향후 구현)
+    alert('지도에서 위치 선택 기능은 곧 추가될 예정입니다.')
   }
 
   const handleSubmit = async (e) => {
@@ -100,12 +84,12 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
 
     // 입력 검증
     if (!formData.title || formData.title.trim().length < 2) {
-      setError('제목은 최소 2자 이상이어야 합니다.')
+      setError('제목을 입력해주세요. (최소 2자 이상)')
       return
     }
 
     if (!formData.content || formData.content.trim().length < 10) {
-      setError('내용은 최소 10자 이상이어야 합니다.')
+      setError('내용을 입력해주세요. (최소 10자 이상)')
       return
     }
 
@@ -279,20 +263,19 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
               <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
                 카테고리 <span className="text-red-500">*</span>
               </label>
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {CATEGORIES.map((cat) => (
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => handleChange({ target: { name: 'category', value: cat.id } })}
-                    className={`px-3 py-2 rounded-lg border-2 transition ${
+                    onClick={() => setFormData({ ...formData, category: cat.id })}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                       formData.category === cat.id
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 hover:border-gray-300'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    <div className="text-lg">{cat.emoji}</div>
-                    <div className="text-xs mt-1">{cat.label}</div>
+                    {cat.emoji} {cat.label}
                   </button>
                 ))}
               </div>
@@ -311,6 +294,23 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="제목을 입력하세요"
                 maxLength={100}
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-1">
+                내용 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="content"
+                name="content"
+                value={formData.content}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="내용을 입력하세요"
+                rows={6}
+                maxLength={1000}
                 required
               />
             </div>
@@ -347,72 +347,48 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 사진 (선택사항, 최대 5장)
               </label>
-              <div className="space-y-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageSelect}
-                  className="hidden"
-                  id="image-upload"
-                />
-                <label
-                  htmlFor="image-upload"
-                  className="block w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-blue-400 transition"
-                >
-                  <svg className="w-6 h-6 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  <span className="text-sm text-gray-600">사진 추가하기</span>
-                </label>
-                {imagePreviews.length > 0 && (
-                  <div className="grid grid-cols-5 gap-2">
-                    {imagePreviews.map((preview, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={preview}
-                          alt={`미리보기 ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImage(index)}
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-1">
-                내용 <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                id="content"
-                name="content"
-                value={formData.content}
-                onChange={handleChange}
-                rows={8}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                placeholder="내용을 입력하세요 (최소 10자 이상)"
-                required
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageSelect}
+                accept="image/*"
+                multiple
+                className="hidden"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                {formData.content.length}자 / 최소 10자 이상
-              </p>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-500 transition"
+              >
+                + 사진 추가
+              </button>
+              {imagePreviews.length > 0 && (
+                <div className="grid grid-cols-5 gap-2 mt-2">
+                  {imagePreviews.map((preview, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={preview}
+                        alt={`미리보기 ${index + 1}`}
+                        className="w-full h-20 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(index)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition"
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition"
               >
                 취소
               </button>

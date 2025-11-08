@@ -3,7 +3,7 @@
 
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 // Firebase 설정 (실제 프로젝트의 설정으로 교체하세요)
@@ -47,6 +47,18 @@ if (isFirebaseConfigured) {
     auth = getAuth(app)
     db = getFirestore(app)
     storage = getStorage(app)
+    
+    // Firestore 오프라인 지속성 활성화 (오프라인에서도 작동)
+    if (typeof window !== 'undefined') {
+      enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code === 'failed-precondition') {
+          console.warn('Firestore 지속성 활성화 실패: 여러 탭이 열려있을 수 있습니다.')
+        } else if (err.code === 'unimplemented') {
+          console.warn('Firestore 지속성 미지원: 브라우저가 지원하지 않습니다.')
+        }
+      })
+    }
+    
     console.log('Firebase 초기화 성공')
   } catch (error) {
     console.error('Firebase 초기화 에러:', error)
