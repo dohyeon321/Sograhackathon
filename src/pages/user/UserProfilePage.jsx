@@ -213,6 +213,8 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
     
     setDeletingCommentId(commentId)
     
+    let deleteSuccess = false
+    
     try {
       if (!db || !commentId) {
         throw new Error('데이터베이스 또는 댓글 ID가 없습니다.')
@@ -224,7 +226,7 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       
       if (!commentSnap.exists()) {
         // 이미 삭제된 댓글인 경우 목록만 새로고침
-        await fetchUserComments()
+        setUserComments(prev => prev.filter(c => c.id !== commentId))
         setDeletingCommentId(null)
         return
       }
@@ -239,6 +241,10 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       
       // 댓글 삭제
       await deleteDoc(commentRef)
+      deleteSuccess = true
+      
+      // 즉시 UI 업데이트 (optimistic update)
+      setUserComments(prev => prev.filter(c => c.id !== commentId))
       
       // 게시물의 댓글 수 감소 (음수 방지)
       if (postId) {
@@ -260,8 +266,14 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
         }
       }
       
-      // 댓글 목록 새로고침
-      await fetchUserComments()
+      // 백그라운드에서 댓글 목록 새로고침 (에러가 나도 UI는 이미 업데이트됨)
+      try {
+        await fetchUserComments()
+      } catch (fetchErr) {
+        if (import.meta.env.DEV) {
+          console.warn('댓글 목록 새로고침 실패 (이미 UI 업데이트됨):', fetchErr)
+        }
+      }
       
       if (import.meta.env.DEV) {
         console.log('댓글 삭제 완료')
@@ -270,7 +282,17 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       if (import.meta.env.DEV) {
         console.error('댓글 삭제 에러:', err)
       }
-      alert(`댓글 삭제 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
+      
+      // 삭제가 실패한 경우에만 에러 메시지 표시
+      if (!deleteSuccess) {
+        alert(`댓글 삭제 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
+      } else {
+        // 삭제는 성공했지만 UI 업데이트 중 에러가 발생한 경우
+        // 이미 UI는 업데이트되었으므로 조용히 처리
+        if (import.meta.env.DEV) {
+          console.warn('댓글 삭제는 성공했지만 UI 업데이트 중 에러 발생:', err)
+        }
+      }
     } finally {
       setDeletingCommentId(null)
     }

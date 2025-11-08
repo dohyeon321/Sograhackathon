@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { collection, query, orderBy, getDocs } from 'firebase/firestore'
+import { useState, useEffect, useMemo } from 'react'
+import { collection, query, orderBy, getDocs, where } from 'firebase/firestore'
 import { db } from '../../../firebase/config'
 import PostCard from './PostCard'
 
@@ -26,8 +26,42 @@ function formatTimeAgo(timestamp) {
 
 function BoardView({ selectedCategory, refreshTrigger, onPostClick }) {
   const [posts, setPosts] = useState([])
+  const [commentCounts, setCommentCounts] = useState({}) // { postId: count }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // 실제 댓글 개수 가져오기 (최적화: 배치 처리)
+  const fetchCommentCounts = async (postIds) => {
+    if (!db || postIds.length === 0) return {}
+    
+    const counts = {}
+    const commentsRef = collection(db, 'comments')
+    
+    // 배치로 처리하여 성능 개선 (최대 10개씩)
+    const batchSize = 10
+    for (let i = 0; i < postIds.length; i += batchSize) {
+      const batch = postIds.slice(i, i + batchSize)
+      const promises = batch.map(async (postId) => {
+        try {
+          const q = query(commentsRef, where('postId', '==', postId))
+          const snapshot = await getDocs(q)
+          return { postId, count: snapshot.size }
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.warn(`댓글 개수 조회 실패 (${postId}):`, err)
+          }
+          return { postId, count: 0 }
+        }
+      })
+      
+      const results = await Promise.all(promises)
+      results.forEach(({ postId, count }) => {
+        counts[postId] = count
+      })
+    }
+    
+    return counts
+  }
 
   const fetchPosts = async () => {
     try {
@@ -64,6 +98,12 @@ function BoardView({ selectedCategory, refreshTrigger, onPostClick }) {
       }
       
       setPosts(postsData)
+      
+      // 게시물 로드 후 댓글 개수 가져오기 (비동기로 처리하여 렉 방지)
+      const postIds = postsData.map(p => p.id)
+      fetchCommentCounts(postIds).then(counts => {
+        setCommentCounts(counts)
+      })
     } catch (err) {
       if (import.meta.env.DEV) {
         console.error('게시물 불러오기 에러:', err)
@@ -79,11 +119,19 @@ function BoardView({ selectedCategory, refreshTrigger, onPostClick }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshTrigger])
 
+  // 실제 댓글 개수가 포함된 게시물 목록
+  const postsWithCommentCounts = useMemo(() => {
+    return posts.map(post => ({
+      ...post,
+      comments: commentCounts[post.id] !== undefined ? commentCounts[post.id] : (post.comments || 0)
+    }))
+  }, [posts, commentCounts])
+
   const filteredPosts = selectedCategory === 'all' 
-    ? posts 
+    ? postsWithCommentCounts 
     : selectedCategory === 'local'
-    ? posts.filter(post => post.authorIsLocal === true)
-    : posts.filter(post => post.category === selectedCategory)
+    ? postsWithCommentCounts.filter(post => post.authorIsLocal === true)
+    : postsWithCommentCounts.filter(post => post.category === selectedCategory)
 
   if (loading) {
     return (

@@ -155,6 +155,14 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
           console.log('댓글 불러오기 성공:', commentsData.length, '개')
         }
         setComments(commentsData)
+        
+        // 실제 댓글 개수로 게시물 정보 업데이트
+        if (post) {
+          setPost(prev => ({
+            ...prev,
+            comments: commentsData.length
+          }))
+        }
       } catch (indexError) {
         // 인덱스 에러인 경우 orderBy 없이 시도
         if (import.meta.env.DEV) {
@@ -179,6 +187,14 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
           console.log('댓글 불러오기 성공 (정렬 없이):', commentsData.length, '개')
         }
         setComments(commentsData)
+        
+        // 실제 댓글 개수로 게시물 정보 업데이트
+        if (post) {
+          setPost(prev => ({
+            ...prev,
+            comments: commentsData.length
+          }))
+        }
       }
     } catch (err) {
       if (import.meta.env.DEV) {
@@ -336,6 +352,8 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
     
     setDeletingCommentId(commentId)
     
+    let deleteSuccess = false
+    
     try {
       if (!db || !postId) {
         throw new Error('데이터베이스 또는 게시물 ID가 없습니다.')
@@ -347,8 +365,17 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
       
       if (!commentSnap.exists()) {
         // 이미 삭제된 댓글인 경우 목록만 새로고침
-        await fetchComments()
-        await fetchPost()
+        setComments(prev => {
+          const updated = prev.filter(c => c.id !== commentId)
+          // 실제 댓글 개수로 게시물 정보 업데이트
+          if (post) {
+            setPost(prevPost => ({
+              ...prevPost,
+              comments: updated.length
+            }))
+          }
+          return updated
+        })
         setDeletingCommentId(null)
         return
       }
@@ -363,6 +390,20 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
       
       // 댓글 삭제
       await deleteDoc(commentRef)
+      deleteSuccess = true
+      
+      // 즉시 UI 업데이트 (optimistic update)
+      setComments(prev => {
+        const updated = prev.filter(c => c.id !== commentId)
+        // 실제 댓글 개수로 게시물 정보 업데이트
+        if (post) {
+          setPost(prevPost => ({
+            ...prevPost,
+            comments: updated.length
+          }))
+        }
+        return updated
+      })
       
       // 게시물의 댓글 수 감소 (음수 방지)
       const postRef = doc(db, 'posts', postId)
@@ -382,11 +423,15 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
         }
       }
       
-      // 댓글 목록 새로고침
-      await fetchComments()
-      
-      // 게시물 정보 새로고침 (댓글 수 업데이트)
-      await fetchPost()
+      // 백그라운드에서 댓글 목록 새로고침 (에러가 나도 UI는 이미 업데이트됨)
+      // fetchPost()는 제거하여 렉 방지 (댓글 개수는 이미 UI에서 업데이트됨)
+      try {
+        await fetchComments()
+      } catch (fetchErr) {
+        if (import.meta.env.DEV) {
+          console.warn('댓글 목록 새로고침 실패 (이미 UI 업데이트됨):', fetchErr)
+        }
+      }
       
       if (import.meta.env.DEV) {
         console.log('댓글 삭제 완료')
@@ -395,7 +440,17 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
       if (import.meta.env.DEV) {
         console.error('댓글 삭제 에러:', err)
       }
-      alert(`댓글 삭제 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
+      
+      // 삭제가 실패한 경우에만 에러 메시지 표시
+      if (!deleteSuccess) {
+        alert(`댓글 삭제 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
+      } else {
+        // 삭제는 성공했지만 UI 업데이트 중 에러가 발생한 경우
+        // 이미 UI는 업데이트되었으므로 조용히 처리
+        if (import.meta.env.DEV) {
+          console.warn('댓글 삭제는 성공했지만 UI 업데이트 중 에러 발생:', err)
+        }
+      }
     } finally {
       setDeletingCommentId(null)
     }
@@ -536,19 +591,16 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
         createdAt: serverTimestamp()
       })
 
-      // 댓글 수 증가
+      setCommentText('')
+      
+      // 댓글 목록 새로고침 (실제 댓글 개수로 자동 업데이트됨)
+      await fetchComments()
+      
+      // 데이터베이스의 댓글 수도 업데이트 (다른 페이지에서 사용할 수 있음)
       const postRef = doc(db, 'posts', postId)
       await updateDoc(postRef, {
         comments: increment(1)
       })
-
-      setCommentText('')
-      
-      // 댓글 목록 새로고침
-      await fetchComments()
-      
-      // 게시물 정보 새로고침 (댓글 수 업데이트)
-      await fetchPost()
       
       if (import.meta.env.DEV) {
         console.log('댓글 작성 완료')
@@ -680,7 +732,7 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
               </button>
               <div className="flex items-center gap-2 text-gray-600">
                 <span className="text-xl">💬</span>
-                <span className="font-medium">{post.comments || 0}</span>
+                <span className="font-medium">{comments.length}</span>
               </div>
               <div className="flex items-center gap-2 text-gray-600">
                 <span className="text-xl">👁️</span>
