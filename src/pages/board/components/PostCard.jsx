@@ -13,14 +13,14 @@ function PostCard({ post, onClick }) {
   }
 
   return (
-    <div 
+    <div
       className="bg-white rounded-lg shadow-sm hover:shadow-lg transition cursor-pointer overflow-hidden"
       onClick={handleClick}
     >
-      <div className="relative h-48 bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-6xl overflow-hidden">
+      <div className="relative h-48 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center text-6xl overflow-hidden">
         {post.images && post.images.length > 0 ? (
-          <img 
-            src={post.images[0]} 
+          <img
+            src={post.images[0]}
             alt={post.title}
             className="w-full h-full object-cover"
           />
@@ -31,6 +31,10 @@ function PostCard({ post, onClick }) {
           {post.category}
         </div>
       </div>
+
+
+
+
       <div className="p-4">
         <div className="flex items-center gap-2 mb-2 text-sm text-gray-500">
           <span>{post.author}</span>
