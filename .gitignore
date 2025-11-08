@@ -12,10 +12,23 @@ dist
 dist-ssr
 *.local
 
-# Environment variables
+# Environment variables (보안 - Git에 커밋 금지)
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+*.env
+*.key
+*.pem
+*.p12
+*.pfx
+# API Keys and Secrets
+*secret*
+*password*
+*api_key*
+*apikey*
+*private*
 
 # Editor directories and files
 .vscode/*

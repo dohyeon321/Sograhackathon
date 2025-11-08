@@ -40,7 +40,8 @@ function MapView({ onPostClick }) {
   const mapRef = useRef(null)
 
   const categories = ['전체', '맛집', '교통', '핫플', '꿀팁']
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM"
+  // Google Maps API 키 - 프로덕션에서는 환경 변수 필수
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || (import.meta.env.DEV ? "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM" : null)
   
   // libraries 배열을 상수로 빼서 성능 경고 방지
   const libraries = ['places']

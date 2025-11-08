@@ -16,20 +16,37 @@ service cloud.firestore {
       // 모든 사용자가 읽기 가능
       allow read: if true;
       
-      // 게시물 작성은 인증된 사용자만 가능 (규칙 간소화)
+      // 게시물 작성은 인증된 사용자만 가능
+      // XSS 방지: 모든 문자열 필드 타입 검증 및 길이 제한
       allow create: if request.auth != null 
-        && request.auth.uid == request.resource.data.authorId;
+        && request.auth.uid == request.resource.data.authorId
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 2
+        && request.resource.data.title.size() <= 100
+        && request.resource.data.content is string
+        && request.resource.data.content.size() >= 10
+        && request.resource.data.content.size() <= 1000
+        && request.resource.data.category is string
+        && request.resource.data.category in ['맛집', '교통', '핫플', '꿀팁'] // 허용된 카테고리만
+        && request.resource.data.location is string
+        && request.resource.data.location.size() >= 2
+        && request.resource.data.location.size() <= 200
+        && request.resource.data.likes is int
+        && request.resource.data.comments is int
+        && request.resource.data.views is int;
       
-      // 게시물 수정은 작성자만 가능하지만, 조회수/좋아요/댓글 수 증가는 모든 사용자 가능
-      // increment()를 사용하므로 affectedKeys()로 체크
-      allow update: if request.auth != null && request.auth.uid == resource.data.authorId
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']))
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']))
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']))
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'likes']))
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'comments']))
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'comments']))
-        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'likes', 'comments']));
+      // 게시물 수정은 작성자만 가능
+      // 단, views, likes, comments 필드는 increment()로만 수정 가능
+      // increment()는 Firestore 서버에서 처리되므로 보안 규칙에서 직접 체크 불가
+      // 대신 작성자가 아닌 경우 views/likes/comments만 수정 가능하도록 제한
+      allow update: if (request.auth != null && request.auth.uid == resource.data.authorId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'location', 'locationAlias', 'locationLat', 'locationLng', 'images', 'updatedAt']))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) 
+          && request.resource.data.views == resource.data.views + 1)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) 
+          && request.resource.data.likes == resource.data.likes + 1)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']) 
+          && request.resource.data.comments == resource.data.comments + 1);
       
       // 게시물 삭제는 작성자만 가능
       allow delete: if request.auth != null 
@@ -41,10 +58,12 @@ service cloud.firestore {
       // 모든 사용자가 읽기 가능
       allow read: if true;
       // 인증된 사용자만 댓글 작성 가능
+      // XSS 방지: content는 문자열이고 길이 제한
       allow create: if request.auth != null 
         && request.auth.uid == request.resource.data.userId
         && request.resource.data.postId is string
-        && request.resource.data.content is string;
+        && request.resource.data.content is string
+        && request.resource.data.content.size() <= 500; // 댓글 길이 제한
       // 댓글 수정/삭제는 작성자만 가능
       allow update, delete: if request.auth != null 
         && request.auth.uid == resource.data.userId;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { doc, getDoc, updateDoc, increment, collection, query, orderBy, getDocs, addDoc, serverTimestamp, deleteDoc, where } from 'firebase/firestore'
 import { db } from '../../firebase/config'
 import { useAuth } from '../../contexts/AuthContext'
@@ -33,10 +33,12 @@ function PostDetailPage({ postId, onBack }) {
   const [commentText, setCommentText] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
   const [liked, setLiked] = useState(false)
-  const [viewed, setViewed] = useState(false)
+  const viewedRef = useRef(false) // useRef로 변경하여 리렌더링과 무관하게 유지
 
   useEffect(() => {
     if (postId) {
+      // postId가 변경될 때 viewed 상태 초기화
+      viewedRef.current = false
       fetchPost()
       fetchComments()
     }
@@ -66,12 +68,20 @@ function PostDetailPage({ postId, onBack }) {
         timeAgo: formatTimeAgo(postData.createdAt)
       })
 
-      // 조회수 증가 (한 번만)
-      if (!viewed) {
-        await updateDoc(postRef, {
-          views: increment(1)
-        })
-        setViewed(true)
+      // 조회수 증가 (한 번만) - useRef로 중복 실행 방지
+      if (!viewedRef.current) {
+        viewedRef.current = true // 먼저 플래그 설정하여 중복 실행 방지
+        try {
+          await updateDoc(postRef, {
+            views: increment(1)
+          })
+        } catch (viewError) {
+          // 조회수 증가 실패해도 게시물은 표시
+          if (import.meta.env.DEV) {
+            console.warn('조회수 증가 실패:', viewError)
+          }
+          viewedRef.current = false // 실패 시 플래그 초기화
+        }
       }
 
       // 좋아요 여부 확인
@@ -79,7 +89,9 @@ function PostDetailPage({ postId, onBack }) {
         checkLiked()
       }
     } catch (err) {
-      console.error('게시물 불러오기 에러:', err)
+      if (import.meta.env.DEV) {
+        console.error('게시물 불러오기 에러:', err)
+      }
       setError(err.message || '게시물을 불러오는 중 오류가 발생했습니다.')
     } finally {
       setLoading(false)
@@ -100,18 +112,24 @@ function PostDetailPage({ postId, onBack }) {
       
       setLiked(!likesSnapshot.empty)
     } catch (err) {
-      console.error('좋아요 확인 에러:', err)
+      if (import.meta.env.DEV) {
+        console.error('좋아요 확인 에러:', err)
+      }
     }
   }
 
   const fetchComments = async () => {
     try {
       if (!db || !postId) {
-        console.warn('댓글 불러오기: db 또는 postId가 없습니다.', { db: !!db, postId })
+        if (import.meta.env.DEV) {
+          console.warn('댓글 불러오기: db 또는 postId가 없습니다.', { db: !!db, postId })
+        }
         return
       }
 
-      console.log('댓글 불러오기 시작:', postId)
+      if (import.meta.env.DEV) {
+        console.log('댓글 불러오기 시작:', postId)
+      }
 
       const commentsRef = collection(db, 'comments')
       
@@ -130,11 +148,15 @@ function PostDetailPage({ postId, onBack }) {
           timeAgo: formatTimeAgo(doc.data().createdAt)
         }))
 
-        console.log('댓글 불러오기 성공:', commentsData.length, '개')
+        if (import.meta.env.DEV) {
+          console.log('댓글 불러오기 성공:', commentsData.length, '개')
+        }
         setComments(commentsData)
       } catch (indexError) {
         // 인덱스 에러인 경우 orderBy 없이 시도
-        console.warn('인덱스 에러, orderBy 없이 시도:', indexError)
+        if (import.meta.env.DEV) {
+          console.warn('인덱스 에러, orderBy 없이 시도:', indexError)
+        }
         const q = query(commentsRef, where('postId', '==', postId))
         const querySnapshot = await getDocs(q)
 
@@ -150,11 +172,15 @@ function PostDetailPage({ postId, onBack }) {
             return a.createdAt.toMillis() - b.createdAt.toMillis()
           })
 
-        console.log('댓글 불러오기 성공 (정렬 없이):', commentsData.length, '개')
+        if (import.meta.env.DEV) {
+          console.log('댓글 불러오기 성공 (정렬 없이):', commentsData.length, '개')
+        }
         setComments(commentsData)
       }
     } catch (err) {
-      console.error('댓글 불러오기 에러:', err)
+      if (import.meta.env.DEV) {
+        console.error('댓글 불러오기 에러:', err)
+      }
       setError(`댓글을 불러오는 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
     }
   }
@@ -202,9 +228,22 @@ function PostDetailPage({ postId, onBack }) {
         setPost(prev => ({ ...prev, likes: prev.likes + 1 }))
       }
     } catch (err) {
-      console.error('좋아요 처리 에러:', err)
+      if (import.meta.env.DEV) {
+        console.error('좋아요 처리 에러:', err)
+      }
       alert('좋아요 처리 중 오류가 발생했습니다.')
     }
+  }
+
+  // XSS 방지 함수
+  const sanitizeInput = (input) => {
+    if (!input) return ''
+    // HTML 특수문자 제거 및 정리
+    return input.trim()
+      .replace(/[<>]/g, '') // HTML 태그 문자 제거
+      .replace(/javascript:/gi, '') // JavaScript 프로토콜 제거
+      .replace(/on\w+=/gi, '') // 이벤트 핸들러 제거
+      .replace(/data:/gi, '') // Data URI 제거
   }
 
   const handleCommentSubmit = async (e) => {
@@ -220,6 +259,12 @@ function PostDetailPage({ postId, onBack }) {
       return
     }
 
+    // 댓글 길이 제한
+    if (commentText.trim().length > 500) {
+      alert('댓글은 500자 이하여야 합니다.')
+      return
+    }
+
     try {
       setSubmittingComment(true)
       
@@ -227,11 +272,11 @@ function PostDetailPage({ postId, onBack }) {
 
       const commentsRef = collection(db, 'comments')
       await addDoc(commentsRef, {
-        postId: postId,
-        userId: currentUser.uid,
-        userEmail: currentUser.email,
-        userName: currentUser.displayName || currentUser.email?.split('@')[0] || '익명',
-        content: commentText.trim(),
+        postId: postId, // Firestore에서 검증됨
+        userId: currentUser.uid, // Firebase에서 검증됨
+        userEmail: sanitizeInput(currentUser.email || ''),
+        userName: sanitizeInput(currentUser.displayName || currentUser.email?.split('@')[0] || '익명'),
+        content: sanitizeInput(commentText.trim()),
         createdAt: serverTimestamp()
       })
 
@@ -249,14 +294,17 @@ function PostDetailPage({ postId, onBack }) {
       // 게시물 정보 새로고침 (댓글 수 업데이트)
       await fetchPost()
       
-      console.log('댓글 작성 완료')
+      if (import.meta.env.DEV) {
+        console.log('댓글 작성 완료')
+      }
     } catch (err) {
-      console.error('댓글 작성 에러:', err)
-      console.error('에러 상세:', {
-        code: err.code,
-        message: err.message,
-        stack: err.stack
-      })
+      if (import.meta.env.DEV) {
+        console.error('댓글 작성 에러:', err)
+        console.error('에러 상세:', {
+          code: err.code,
+          message: err.message
+        })
+      }
       alert(`댓글 작성 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
     } finally {
       setSubmittingComment(false)

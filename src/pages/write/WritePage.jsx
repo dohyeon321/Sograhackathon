@@ -34,7 +34,8 @@ function WritePage({ onClose, onSuccess }) {
   const autocompleteRef = useRef(null)
   const mapRef = useRef(null)
   
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM"
+  // Google Maps API 키 - 프로덕션에서는 환경 변수 필수
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || (import.meta.env.DEV ? "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM" : null)
   const libraries = ['places']
   
   const { isLoaded, loadError } = useLoadScript({
@@ -79,17 +80,49 @@ function WritePage({ onClose, onSuccess }) {
 
     const newImages = []
     const newPreviews = []
+    const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+    const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
 
     files.forEach((file) => {
-      if (file.type.startsWith('image/')) {
-        newImages.push(file)
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          newPreviews.push(e.target.result)
-          setImagePreviews([...imagePreviews, ...newPreviews])
-        }
-        reader.readAsDataURL(file)
+      // 파일 타입 검증
+      if (!file.type.startsWith('image/') || !ALLOWED_TYPES.includes(file.type)) {
+        setError(`${file.name}: 지원하지 않는 파일 형식입니다. (JPEG, PNG, GIF, WebP만 가능)`)
+        return
       }
+
+      // 파일 크기 검증
+      if (file.size > MAX_FILE_SIZE) {
+        setError(`${file.name}: 파일 크기가 너무 큽니다. (최대 5MB)`)
+        return
+      }
+
+      // 파일 이름 검증 (XSS 및 경로 탐색 공격 방지)
+      if (file.name.length > 255) {
+        setError(`${file.name}: 파일 이름이 너무 깁니다.`)
+        return
+      }
+      
+      // 경로 탐색 문자 검증
+      if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
+        setError(`${file.name}: 파일 이름에 허용되지 않는 문자가 포함되어 있습니다.`)
+        return
+      }
+      
+      // 파일 확장자 검증 (화이트리스트)
+      const fileExtension = file.name.split('.').pop()?.toLowerCase()
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+      if (!fileExtension || !allowedExtensions.includes(fileExtension)) {
+        setError(`${file.name}: 지원하지 않는 파일 확장자입니다. (JPEG, PNG, GIF, WebP만 가능)`)
+        return
+      }
+
+      newImages.push(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        newPreviews.push(e.target.result)
+        setImagePreviews([...imagePreviews, ...newPreviews])
+      }
+      reader.readAsDataURL(file)
     })
 
     setSelectedImages([...selectedImages, ...newImages])
@@ -170,9 +203,35 @@ function WritePage({ onClose, onSuccess }) {
     e.preventDefault()
     setError('')
 
-    // 입력 검증
+    // 입력 검증 및 XSS 방지 (React는 기본적으로 이스케이프하지만 추가 검증)
+    const sanitizeInput = (input) => {
+      if (!input) return ''
+      // HTML 특수문자 제거 및 정리
+      return input.trim()
+        .replace(/[<>]/g, '') // HTML 태그 문자 제거
+        .replace(/javascript:/gi, '') // JavaScript 프로토콜 제거
+        .replace(/on\w+=/gi, '') // 이벤트 핸들러 제거
+        .replace(/data:/gi, '') // Data URI 제거 (이미지는 별도 처리)
+    }
+    
+    // 파일 이름 검증 (경로 탐색 공격 방지)
+    const sanitizeFileName = (fileName) => {
+      if (!fileName) return ''
+      // 경로 탐색 문자 제거
+      return fileName
+        .replace(/\.\./g, '') // 상위 디렉토리 탐색 방지
+        .replace(/[\/\\]/g, '_') // 경로 구분자 제거
+        .replace(/[^a-zA-Z0-9._-]/g, '_') // 특수문자 제거
+        .substring(0, 255) // 파일 이름 길이 제한
+    }
+
     if (!formData.title || formData.title.trim().length < 2) {
       setError('제목을 입력해주세요. (최소 2자 이상)')
+      return
+    }
+
+    if (formData.title.trim().length > 100) {
+      setError('제목은 100자 이하여야 합니다.')
       return
     }
 
@@ -181,13 +240,35 @@ function WritePage({ onClose, onSuccess }) {
       return
     }
 
+    if (formData.content.trim().length > 1000) {
+      setError('내용은 1000자 이하여야 합니다.')
+      return
+    }
+
     if (!formData.category) {
       setError('카테고리를 선택해주세요.')
       return
     }
 
+    // 카테고리 검증 (허용된 카테고리만)
+    const allowedCategories = ['맛집', '교통', '핫플', '꿀팁']
+    if (!allowedCategories.includes(formData.category)) {
+      setError('올바른 카테고리를 선택해주세요.')
+      return
+    }
+
     if (!formData.location || formData.location.trim().length < 2) {
       setError('위치를 입력해주세요.')
+      return
+    }
+
+    if (formData.location.trim().length > 200) {
+      setError('위치는 200자 이하여야 합니다.')
+      return
+    }
+
+    if (formData.locationAlias && formData.locationAlias.trim().length > 50) {
+      setError('위치 별칭은 50자 이하여야 합니다.')
       return
     }
 
@@ -210,15 +291,23 @@ function WritePage({ onClose, onSuccess }) {
         try {
           for (let i = 0; i < selectedImages.length; i++) {
             const file = selectedImages[i]
-            const fileName = `${currentUser.uid}_${Date.now()}_${i}`
-            const storageRef = ref(storage, `posts/${fileName}`)
+            
+            // 파일 이름 보안 검증 (경로 탐색 공격 방지)
+            // 사용자 입력 파일 이름 대신 안전한 파일 이름 생성
+            const safeFileName = `${currentUser.uid}_${Date.now()}_${i}.${file.name.split('.').pop()?.toLowerCase() || 'jpg'}`
+            // 경로 탐색 문자 제거
+            const sanitizedFileName = safeFileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+            
+            const storageRef = ref(storage, `posts/${sanitizedFileName}`)
             
             try {
               await uploadBytes(storageRef, file)
               const downloadURL = await getDownloadURL(storageRef)
               imageUrls.push(downloadURL)
             } catch (uploadError) {
-              console.warn(`이미지 ${i + 1} 업로드 실패:`, uploadError)
+              if (import.meta.env.DEV) {
+                console.warn(`이미지 ${i + 1} 업로드 실패:`, uploadError)
+              }
               // 개별 이미지 업로드 실패는 무시하고 계속 진행
               if (!imageUploadWarning) {
                 imageUploadWarning = `일부 이미지 업로드에 실패했습니다. (CORS 또는 Storage 규칙을 확인하세요)`
@@ -226,24 +315,26 @@ function WritePage({ onClose, onSuccess }) {
             }
           }
         } catch (imageError) {
-          console.warn('이미지 업로드 실패:', imageError)
+          if (import.meta.env.DEV) {
+            console.warn('이미지 업로드 실패:', imageError)
+          }
           imageUploadWarning = `이미지 업로드에 실패했습니다. (CORS 또는 Storage 규칙을 확인하세요) 게시물은 저장됩니다.`
         }
       }
 
-      // Firestore에 게시물 저장
+      // Firestore에 게시물 저장 (입력값 정리 및 XSS 방지)
       const postData = {
-        title: formData.title.trim(),
-        content: formData.content.trim(),
-        category: formData.category,
-        location: formData.location.trim(),
-        locationAlias: formData.locationAlias.trim() || null,
-        locationLat: formData.locationLat || null,
-        locationLng: formData.locationLng || null,
-        images: imageUrls,
-        authorId: currentUser.uid,
-        authorName: userData?.displayName || currentUser.email,
-        authorRegion: userData?.region || '',
+        title: sanitizeInput(formData.title.trim()),
+        content: sanitizeInput(formData.content.trim()),
+        category: formData.category, // 카테고리는 허용된 값만 사용
+        location: sanitizeInput(formData.location.trim()),
+        locationAlias: formData.locationAlias ? sanitizeInput(formData.locationAlias.trim()) : null,
+        locationLat: typeof formData.locationLat === 'number' ? formData.locationLat : null, // 타입 검증
+        locationLng: typeof formData.locationLng === 'number' ? formData.locationLng : null, // 타입 검증
+        images: Array.isArray(imageUrls) ? imageUrls : [], // 배열 타입 검증
+        authorId: currentUser.uid, // Firebase에서 검증됨
+        authorName: sanitizeInput(userData?.displayName || currentUser.email || '익명'),
+        authorRegion: sanitizeInput(userData?.region || ''),
         likes: 0,
         comments: 0,
         views: 0,
@@ -251,27 +342,25 @@ function WritePage({ onClose, onSuccess }) {
         updatedAt: serverTimestamp()
       }
 
-      console.log('게시물 저장 시도:', postData)
-      console.log('현재 사용자:', currentUser?.uid)
-      console.log('Firebase DB 상태:', db ? '초기화됨' : '초기화 안됨')
-      console.log('사용자 데이터:', userData)
+      // 개발 모드에서만 로그 출력
+      if (import.meta.env.DEV) {
+        console.log('게시물 저장 시도')
+        console.log('Firebase DB 상태:', db ? '초기화됨' : '초기화 안됨')
+      }
       
-      // Firestore 연결 테스트
-      console.log('Firestore 연결 테스트 중...')
-      try {
-        // 간단한 읽기 테스트로 연결 확인
-        const testRef = collection(db, 'posts')
-        const testQuery = query(testRef, limit(1))
-        await getDocs(testQuery)
-        console.log('Firestore 연결 확인됨')
-      } catch (testError) {
-        console.error('Firestore 연결 테스트 실패:', testError)
-        // 연결 테스트 실패해도 저장 시도는 계속
-        console.warn('연결 테스트 실패했지만 저장을 시도합니다...')
+      // Firestore 연결 테스트 (개발 모드에서만)
+      if (import.meta.env.DEV) {
+        try {
+          const testRef = collection(db, 'posts')
+          const testQuery = query(testRef, limit(1))
+          await getDocs(testQuery)
+          console.log('Firestore 연결 확인됨')
+        } catch (testError) {
+          console.error('Firestore 연결 테스트 실패:', testError)
+        }
       }
       
       try {
-        console.log('addDoc 호출 중...')
         // 타임아웃을 10초로 단축
         const savePromise = addDoc(collection(db, 'posts'), postData)
         const timeoutPromise = new Promise((_, reject) => 
@@ -279,14 +368,17 @@ function WritePage({ onClose, onSuccess }) {
         )
         
         const docRef = await Promise.race([savePromise, timeoutPromise])
-        console.log('게시물 저장 성공:', docRef.id)
+        if (import.meta.env.DEV) {
+          console.log('게시물 저장 성공:', docRef.id)
+        }
       } catch (saveError) {
-        console.error('addDoc 실행 중 에러:', saveError)
-        console.error('에러 상세:', {
-          code: saveError.code,
-          message: saveError.message,
-          stack: saveError.stack
-        })
+        if (import.meta.env.DEV) {
+          console.error('addDoc 실행 중 에러:', saveError)
+          console.error('에러 상세:', {
+            code: saveError.code,
+            message: saveError.message
+          })
+        }
         throw saveError
       }
 
@@ -320,10 +412,11 @@ function WritePage({ onClose, onSuccess }) {
         onSuccess()
       }
     } catch (error) {
-      console.error('게시물 작성 에러:', error)
-      console.error('에러 코드:', error.code)
-      console.error('에러 메시지:', error.message)
-      console.error('전체 에러:', error)
+      if (import.meta.env.DEV) {
+        console.error('게시물 작성 에러:', error)
+        console.error('에러 코드:', error.code)
+        console.error('에러 메시지:', error.message)
+      }
       
       let errorMessage = '게시물 작성 중 오류가 발생했습니다.'
       
