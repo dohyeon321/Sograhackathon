@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import Header from './components/common/Header'
+import HotIssueBanner from './components/common/HotIssueBanner'
+import RegionNewsBanner from './components/common/RegionNewsBanner'
 import TabNavigation from './components/common/TabNavigation'
 import BoardPage from './pages/board/BoardPage'
 import MapPage from './pages/map/MapPage'
@@ -15,6 +17,7 @@ function App() {
   const [selectedPostId, setSelectedPostId] = useState(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [previousPage, setPreviousPage] = useState('board') // 이전 페이지 추적
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
@@ -32,12 +35,15 @@ function App() {
   }
 
   const handlePostClick = (postId) => {
+    // 현재 페이지를 이전 페이지로 저장
+    setPreviousPage(currentPage)
     setSelectedPostId(postId)
     setCurrentPage('postDetail')
   }
 
   const handleBack = () => {
-    setCurrentPage('board')
+    // 이전 페이지로 돌아가기 (지도에서 왔다면 지도로, 게시판에서 왔다면 게시판으로)
+    setCurrentPage(previousPage)
     setSelectedPostId(null)
   }
 
@@ -63,6 +69,11 @@ function App() {
               onProfileClick={handleProfileClick}
               onLoginClick={handleLoginClick}
             />
+            <HotIssueBanner 
+              onPostClick={handlePostClick}
+              refreshTrigger={refreshTrigger}
+            />
+            <RegionNewsBanner />
             <TabNavigation activeTab={activeTab} setActiveTab={handleTabChange} />
           </>
         )}
@@ -74,7 +85,7 @@ function App() {
             onPostClick={handlePostClick}
           />
         )}
-        {currentPage === 'map' && <MapPage />}
+        {currentPage === 'map' && <MapPage onPostClick={handlePostClick} />}
         {currentPage === 'postDetail' && (
           <PostDetailPage 
             postId={selectedPostId} 

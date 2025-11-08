@@ -1,7 +1,7 @@
 import MapView from './components/MapView'
 
-function MapPage() {
-  return <MapView />
+function MapPage({ onPostClick }) {
+  return <MapView onPostClick={onPostClick} />
 }
 
 export default MapPage

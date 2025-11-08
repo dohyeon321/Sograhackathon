@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useLoadScript, GoogleMap, Marker, InfoWindow } from '@react-google-maps/api'
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '../../../firebase/config'
 
 const containerStyle = {
   width: '100%',
@@ -20,113 +22,24 @@ const mapOptions = {
   fullscreenControl: false
 }
 
-// 게시물 데이터 (지도용)
-const mapPosts = [
-  { 
-    id: 1, 
-    lat: 36.3504, 
-    lng: 127.3845, 
-    title: '은행동 숨은 맛집 발견!', 
-    category: '맛집', 
-    categoryGroup: '문화',
-    emoji: '🍜', 
-    color: '#ff5252',
-    info: '30년 전통의 작은 분식집인데 진짜 맛있어요. 떡볶이 맛이 예술이고 튀김도 바삭바삭합니다.',
-    location: '대전 중구 은행동',
-    author: '대전토박이',
-    likes: 42,
-    comments: 18,
-    views: 234
-  },
-  { 
-    id: 2, 
-    lat: 36.3621, 
-    lng: 127.3447, 
-    title: '대전 버스 환승 절약 팁', 
-    category: '교통', 
-    categoryGroup: '경제',
-    emoji: '💰', 
-    color: '#f1c40f',
-    info: '10년 넘게 대전 살면서 알게 된 버스 꿀팁! 환승 루트 잘 짜면 시간도 돈도 절약 가능합니다.',
-    location: '대전 유성구',
-    author: '유성구민',
-    likes: 67,
-    comments: 31,
-    views: 512
-  },
-  { 
-    id: 3, 
-    lat: 36.3314, 
-    lng: 127.4285, 
-    title: '대전역 밤길 안전 체크', 
-    category: '꿀팁', 
-    categoryGroup: '안전',
-    emoji: '🚨', 
-    color: '#e74c3c',
-    info: '대전역 앞이 요즘 완전 핫해졌어요! 새로 생긴 감성 카페들과 맛집들 직접 다녀온 후기입니다.',
-    location: '대전 동구 대전역',
-    author: '서구댁',
-    likes: 89,
-    comments: 45,
-    views: 892
-  },
-  { 
-    id: 4, 
-    lat: 36.3276, 
-    lng: 127.4273, 
-    title: '쓰레기 분리배출 꿀가이드', 
-    category: '꿀팁', 
-    categoryGroup: '환경',
-    emoji: '♻️', 
-    color: '#2ecc71',
-    info: '대전에서 쓰레기 분리배출 제대로 하는 법! 환경을 지키면서도 효율적으로 배출하는 팁입니다.',
-    location: '대전 동구 중앙시장',
-    author: '중구토박이',
-    likes: 123,
-    comments: 67,
-    views: 1200
-  },
-  { 
-    id: 5, 
-    lat: 36.3667, 
-    lng: 127.3833, 
-    title: '대전 문화 축제 일정', 
-    category: '관광', 
-    categoryGroup: '문화',
-    emoji: '🎉', 
-    color: '#9b59b6',
-    info: '대전에서 열리는 다양한 문화 축제 일정을 정리했습니다. 가족과 함께 즐길 수 있는 축제들!',
-    location: '대전 유성구 엑스포',
-    author: '대전여행러버',
-    likes: 92,
-    comments: 34,
-    views: 678
-  },
-  { 
-    id: 6, 
-    lat: 36.3589, 
-    lng: 127.3849, 
-    title: '지역 물가 비교 (전통시장)', 
-    category: '꿀팁', 
-    categoryGroup: '경제',
-    emoji: '📊', 
-    color: '#3498db',
-    info: '대전 전통시장 물가 비교! 어디서 사는 게 가장 저렴한지 현지인이 알려드립니다.',
-    location: '대전 동구 대청호',
-    author: '자연이조아',
-    likes: 65,
-    comments: 19,
-    views: 523
-  }
-]
+const CATEGORY_EMOJI = {
+  '맛집': '🍽️',
+  '교통': '🚗',
+  '핫플': '🎉',
+  '꿀팁': '💡'
+}
 
-function MapView() {
+function MapView({ onPostClick }) {
+  const [posts, setPosts] = useState([])
   const [selectedPost, setSelectedPost] = useState(null)
+  const [selectedLocationPosts, setSelectedLocationPosts] = useState([]) // 같은 위치의 게시물들
+  const [showSidebar, setShowSidebar] = useState(false) // 사이드 창 표시 여부
   const [selectedCategory, setSelectedCategory] = useState('전체')
   const [mapError, setMapError] = useState(null)
+  const [loading, setLoading] = useState(true)
   const mapRef = useRef(null)
 
-  const categories = ['전체', '문화', '경제', '안전', '환경']
+  const categories = ['전체', '맛집', '교통', '핫플', '꿀팁']
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM"
   
   // libraries 배열을 상수로 빼서 성능 경고 방지
@@ -137,9 +50,57 @@ function MapView() {
     libraries: libraries
   })
 
+  // Firestore에서 게시물 가져오기
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        setLoading(true)
+        setMapError(null)
+        
+        if (!db) {
+          console.warn('Firebase가 초기화되지 않았습니다.')
+          setLoading(false)
+          return
+        }
+        
+        const postsRef = collection(db, 'posts')
+        const querySnapshot = await getDocs(postsRef)
+        
+        const postsData = querySnapshot.docs
+          .map(doc => {
+            const data = doc.data()
+            // locationLat과 locationLng가 있는 게시물만
+            if (data.locationLat && data.locationLng) {
+              return {
+                id: doc.id,
+                ...data,
+                lat: data.locationLat,
+                lng: data.locationLng,
+                emoji: CATEGORY_EMOJI[data.category] || '📝'
+              }
+            }
+            return null
+          })
+          .filter(post => post !== null)
+        
+        console.log('지도용 게시물 수:', postsData.length)
+        setPosts(postsData)
+      } catch (err) {
+        console.error('게시물 불러오기 에러:', err)
+        setMapError(`게시물을 불러오는 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (isLoaded) {
+      fetchPosts()
+    }
+  }, [isLoaded])
+
   const filteredPosts = selectedCategory === '전체'
-    ? mapPosts
-    : mapPosts.filter(post => post.categoryGroup === selectedCategory)
+    ? posts
+    : posts.filter(post => post.category === selectedCategory)
 
   // API 키가 없을 때
   if (!apiKey || apiKey === 'YOUR_API_KEY') {
@@ -218,13 +179,28 @@ function MapView() {
         onLoad={(map) => {
           mapRef.current = map
         }}
+        onClick={() => {
+          // 지도 클릭 시 사이드 창 닫기
+          setShowSidebar(false)
+          setSelectedLocationPosts([])
+        }}
       >
         {filteredPosts.map((post) => {
-          // SVG 아이콘 생성 (이모지 지원을 위해 encodeURIComponent 사용)
+          // 카테고리별 색상 설정
+          const categoryColors = {
+            '맛집': '#ff5252',
+            '교통': '#f1c40f',
+            '핫플': '#9b59b6',
+            '꿀팁': '#3498db'
+          }
+          const color = categoryColors[post.category] || '#ff5252'
+          const emoji = post.emoji || '📝'
+          
+          // SVG 아이콘 생성 (카테고리 이모지 사용)
           const svgString = `
-            <svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="20" cy="20" r="18" fill="${post.color}" stroke="white" stroke-width="3"/>
-              <text x="20" y="28" font-size="20" text-anchor="middle" fill="white">${post.emoji}</text>
+            <svg width="50" height="50" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="25" cy="25" r="22" fill="${color}" stroke="white" stroke-width="3"/>
+              <text x="25" y="33" font-size="24" text-anchor="middle" fill="white">${emoji}</text>
             </svg>
           `.trim()
           const svgIcon = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`
@@ -235,53 +211,88 @@ function MapView() {
               position={{ lat: post.lat, lng: post.lng }}
               icon={{
                 url: svgIcon,
-                scaledSize: { width: 40, height: 40 },
-                anchor: { x: 20, y: 20 }
+                scaledSize: { width: 50, height: 50 },
+                anchor: { x: 25, y: 25 }
               }}
-              onClick={() => setSelectedPost(post)}
+              onClick={() => {
+                // 마커 클릭 시 같은 위치의 모든 게시물 찾기
+                const sameLocationPosts = posts.filter(p => 
+                  p.lat === post.lat && p.lng === post.lng
+                )
+                setSelectedLocationPosts(sameLocationPosts)
+                setShowSidebar(true) // 사이드 창 열기
+                // InfoWindow는 표시하지 않음
+              }}
             />
           )
         })}
 
-        {selectedPost && (
-          <InfoWindow
-            position={{ lat: selectedPost.lat, lng: selectedPost.lng }}
-            onCloseClick={() => setSelectedPost(null)}
-          >
-            <div className="p-2 min-w-[200px]">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl">{selectedPost.emoji}</span>
-                <div>
-                  <h3 className="font-bold text-gray-800 text-sm">{selectedPost.title}</h3>
-                  <div className="text-xs" style={{ color: selectedPost.color }}>
-                    {selectedPost.categoryGroup}
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-gray-600 mb-2">{selectedPost.info}</p>
-              <div className="text-xs text-gray-500 mb-2">📍 {selectedPost.location}</div>
-              <div className="flex gap-3 text-xs text-gray-500 mb-3">
-                <span>❤️ {selectedPost.likes}</span>
-                <span>💬 {selectedPost.comments}</span>
-                <span>👁️ {selectedPost.views}</span>
-              </div>
-              <button
-                onClick={() => {
-                  alert(`${selectedPost.title} 상세보기 클릭!`)
-                  setSelectedPost(null)
-                }}
-                className="w-full bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-blue-600 transition"
-              >
-                자세히 보기
-              </button>
-            </div>
-          </InfoWindow>
-        )}
       </GoogleMap>
       
       {mapError && (
         <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-20 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
           {mapError}
+        </div>
+      )}
+
+      {/* 사이드 창 */}
+      {showSidebar && selectedLocationPosts.length > 0 && (
+        <div className="absolute top-0 right-0 w-96 h-full bg-white shadow-2xl z-30 flex flex-col">
+          {/* 사이드 창 헤더 */}
+          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">게시물 목록</h3>
+              <p className="text-sm text-gray-500">
+                {selectedLocationPosts.length}개의 게시물
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowSidebar(false)
+                setSelectedLocationPosts([])
+              }}
+              className="text-gray-400 hover:text-gray-600 transition"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 게시물 목록 (스크롤 가능) */}
+          <div className="flex-1 overflow-y-auto">
+            {selectedLocationPosts.map((post) => (
+              <div
+                key={post.id}
+                className="p-4 border-b border-gray-100 hover:bg-gray-50 transition"
+              >
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="text-2xl">{post.emoji}</span>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-gray-800 mb-1">{post.title}</h4>
+                    <p className="text-xs text-gray-500 mb-2">{post.category}</p>
+                    <p className="text-sm text-gray-600 mb-2 line-clamp-2">{post.content?.substring(0, 100)}...</p>
+                    <div className="text-xs text-gray-500 mb-2">📍 {post.locationAlias || post.location}</div>
+                    <div className="flex gap-3 text-xs text-gray-500 mb-3">
+                      <span>❤️ {post.likes || 0}</span>
+                      <span>💬 {post.comments || 0}</span>
+                      <span>👁️ {post.views || 0}</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (onPostClick) {
+                      onPostClick(post.id)
+                    }
+                  }}
+                  className="w-full bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition"
+                >
+                  자세히 보기
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
