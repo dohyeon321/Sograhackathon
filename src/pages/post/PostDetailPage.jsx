@@ -33,6 +33,9 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
   const [commentText, setCommentText] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
   const [liked, setLiked] = useState(false)
+  const [editingCommentId, setEditingCommentId] = useState(null) // 수정 중인 댓글 ID
+  const [editingCommentText, setEditingCommentText] = useState('') // 수정 중인 댓글 내용
+  const [deletingCommentId, setDeletingCommentId] = useState(null) // 삭제 중인 댓글 ID
   const viewedRef = useRef(false) // useRef로 변경하여 리렌더링과 무관하게 유지
 
   useEffect(() => {
@@ -326,17 +329,50 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
       return
     }
     
+    // 중복 삭제 방지
+    if (deletingCommentId === commentId) {
+      return
+    }
+    
+    setDeletingCommentId(commentId)
+    
     try {
-      if (!db || !postId) return
+      if (!db || !postId) {
+        throw new Error('데이터베이스 또는 게시물 ID가 없습니다.')
+      }
       
+      // 댓글 존재 여부 확인
       const commentRef = doc(db, 'comments', commentId)
+      const commentSnap = await getDoc(commentRef)
+      
+      if (!commentSnap.exists()) {
+        // 이미 삭제된 댓글인 경우 목록만 새로고침
+        await fetchComments()
+        await fetchPost()
+        setDeletingCommentId(null)
+        return
+      }
+      
+      // 댓글 삭제
       await deleteDoc(commentRef)
       
-      // 게시물의 댓글 수 감소
+      // 게시물의 댓글 수 감소 (음수 방지)
       const postRef = doc(db, 'posts', postId)
-      await updateDoc(postRef, {
-        comments: increment(-1)
-      })
+      const postSnap = await getDoc(postRef)
+      
+      if (postSnap.exists()) {
+        const currentComments = postSnap.data().comments || 0
+        if (currentComments > 0) {
+          await updateDoc(postRef, {
+            comments: increment(-1)
+          })
+        } else {
+          // 댓글 수가 0이면 0으로 설정
+          await updateDoc(postRef, {
+            comments: 0
+          })
+        }
+      }
       
       // 댓글 목록 새로고침
       await fetchComments()
@@ -351,12 +387,14 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
       if (import.meta.env.DEV) {
         console.error('댓글 삭제 에러:', err)
       }
-      alert('댓글 삭제 중 오류가 발생했습니다.')
+      alert(`댓글 삭제 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
+    } finally {
+      setDeletingCommentId(null)
     }
   }
   
-  // 댓글 수정
-  const handleEditComment = async (commentId, commentUserId, currentContent) => {
+  // 댓글 수정 시작
+  const handleStartEditComment = (commentId, commentUserId, currentContent) => {
     if (!currentUser) return
     
     // 보안: 작성자 확인
@@ -365,24 +403,54 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
       return
     }
     
-    const newContent = prompt('댓글을 수정하세요:', currentContent)
-    if (!newContent || newContent.trim() === currentContent) {
+    setEditingCommentId(commentId)
+    setEditingCommentText(currentContent)
+  }
+  
+  // 댓글 수정 취소
+  const handleCancelEditComment = () => {
+    setEditingCommentId(null)
+    setEditingCommentText('')
+  }
+  
+  // 댓글 수정 저장
+  const handleSaveEditComment = async (commentId) => {
+    if (!currentUser || !db) return
+    
+    const newContent = editingCommentText.trim()
+    
+    if (!newContent) {
+      alert('댓글 내용을 입력해주세요.')
       return
     }
     
-    if (newContent.trim().length > 500) {
+    if (newContent.length > 500) {
       alert('댓글은 500자 이하여야 합니다.')
       return
     }
     
     try {
-      if (!db) return
-      
       const commentRef = doc(db, 'comments', commentId)
+      
+      // 댓글 존재 여부 확인
+      const commentSnap = await getDoc(commentRef)
+      if (!commentSnap.exists()) {
+        alert('댓글이 존재하지 않습니다.')
+        setEditingCommentId(null)
+        setEditingCommentText('')
+        await fetchComments()
+        return
+      }
+      
+      // 댓글 수정
       await updateDoc(commentRef, {
-        content: sanitizeInput(newContent.trim()),
+        content: sanitizeInput(newContent),
         updatedAt: serverTimestamp()
       })
+      
+      // 수정 모드 종료
+      setEditingCommentId(null)
+      setEditingCommentText('')
       
       // 댓글 목록 새로고침
       await fetchComments()
@@ -394,7 +462,7 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
       if (import.meta.env.DEV) {
         console.error('댓글 수정 에러:', err)
       }
-      alert('댓글 수정 중 오류가 발생했습니다.')
+      alert(`댓글 수정 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
     }
   }
 
@@ -634,24 +702,57 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
                         <span className="text-sm text-gray-500">{comment.timeAgo}</span>
                       </div>
                       {/* 작성자만 수정/삭제 버튼 표시 */}
-                      {currentUser && comment.userId === currentUser.uid && (
+                      {currentUser && comment.userId === currentUser.uid && editingCommentId !== comment.id && (
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleEditComment(comment.id, comment.userId, comment.content)}
+                            onClick={() => handleStartEditComment(comment.id, comment.userId, comment.content)}
                             className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
                           >
                             수정
                           </button>
                           <button
                             onClick={() => handleDeleteComment(comment.id, comment.userId)}
-                            className="text-xs text-red-600 hover:text-red-700 hover:underline"
+                            disabled={deletingCommentId === comment.id}
+                            className="text-xs text-red-600 hover:text-red-700 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            삭제
+                            {deletingCommentId === comment.id ? '삭제 중...' : '삭제'}
                           </button>
                         </div>
                       )}
                     </div>
-                    <p className="text-gray-700">{comment.content}</p>
+                    {/* 수정 모드 */}
+                    {editingCommentId === comment.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editingCommentText}
+                          onChange={(e) => setEditingCommentText(e.target.value)}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                          rows={3}
+                          maxLength={500}
+                        />
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-500">
+                            {editingCommentText.length} / 500자
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={handleCancelEditComment}
+                              className="px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded transition"
+                            >
+                              취소
+                            </button>
+                            <button
+                              onClick={() => handleSaveEditComment(comment.id)}
+                              className="px-3 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition"
+                            >
+                              저장
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-700">{comment.content}</p>
+                    )}
                   </div>
                 </div>
               ))
