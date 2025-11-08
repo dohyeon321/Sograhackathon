@@ -31,7 +31,9 @@ function SignupForm({ onClose, onSwitchToLogin }) {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signup, logout } = useAuth()
+  const [resending, setResending] = useState(false) // 재전송 중 여부
+  const [emailSent, setEmailSent] = useState(false) // 이메일 인증 링크 전송 완료 여부
+  const { signup, logout, resendEmailVerification } = useAuth()
   const [isLocalVerified, setIsLocalVerified] = useState(false)
 
 
@@ -103,25 +105,35 @@ function SignupForm({ onClose, onSwitchToLogin }) {
       )
 
       if (result.success) {
-        // 회원가입 성공 시 Firebase Auth에서 자동 로그인된 상태를 로그아웃
-        // 이메일은 유지하고 로그인 창으로 이동
-        const signupEmail = formData.email
-        
-        // 폼 초기화
-        setFormData({
-          displayName: '',
-          email: '',
-          password: '',
-          confirmPassword: '',
-          region: ''
-        })
-        setIsLocalVerified(false)
-        
-        // Firebase Auth에서 로그아웃 (자동 로그인 방지)
-        await logout()
-        
-        // 로그인 창으로 전환 (이메일 전달)
-        onSwitchToLogin(signupEmail)
+        // 이메일 인증 링크 전송 완료
+        if (result.emailSent) {
+          setEmailSent(true)
+          // 이메일은 유지
+          const signupEmail = formData.email
+          
+          // 폼 초기화 (이메일 제외)
+          setFormData({
+            displayName: '',
+            email: signupEmail, // 이메일은 유지
+            password: '',
+            confirmPassword: '',
+            region: ''
+          })
+          setIsLocalVerified(false)
+        } else {
+          // 이메일 전송 실패한 경우 기존 로직
+          const signupEmail = formData.email
+          setFormData({
+            displayName: '',
+            email: '',
+            password: '',
+            confirmPassword: '',
+            region: ''
+          })
+          setIsLocalVerified(false)
+          await logout()
+          onSwitchToLogin(signupEmail)
+        }
       } else {
         setError(result.error)
       }
@@ -131,6 +143,98 @@ function SignupForm({ onClose, onSwitchToLogin }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 이메일 인증 링크 전송 완료 화면
+  if (emailSent) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-yellow-50 border-2 border-yellow-400 text-yellow-800 px-4 py-4 rounded-lg">
+          <div className="font-bold text-lg mb-3 flex items-center gap-2">
+            <span className="text-2xl">📧</span>
+            <span>이메일 인증이 필요합니다</span>
+          </div>
+          <div className="text-sm space-y-2">
+            <p className="font-semibold">
+              <strong className="text-yellow-900">{formData.email}</strong>로 인증 링크를 전송했습니다.
+            </p>
+            <div className="bg-yellow-100 p-3 rounded border border-yellow-300">
+              <p className="font-bold text-yellow-900 mb-1">⚠️ 중요:</p>
+              <p className="text-yellow-800">
+                이메일을 확인하여 인증 링크를 클릭해야 <strong>회원가입이 완료</strong>됩니다.
+              </p>
+            </div>
+            <p className="text-xs text-yellow-700 mt-2">
+              💡 이메일이 보이지 않으면 스팸 폴더를 확인해주세요.
+            </p>
+            <p className="text-xs text-yellow-700">
+              ⏰ 인증 링크는 1시간 후 만료됩니다.
+            </p>
+          </div>
+        </div>
+        
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+          <p className="font-semibold">
+            ⚠️ 이메일 인증을 완료하지 않으면 로그인할 수 없습니다.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={async () => {
+              setResending(true)
+              setError('')
+              
+              // 비밀번호를 다시 입력받아야 재전송 가능
+              const password = prompt('이메일 인증 링크를 재전송하려면 비밀번호를 입력해주세요:')
+              if (!password) {
+                setResending(false)
+                return
+              }
+
+              const result = await resendEmailVerification(formData.email, password)
+              if (result.success) {
+                alert('이메일 인증 링크를 재전송했습니다. 이메일을 확인해주세요.')
+              } else {
+                setError(result.error)
+              }
+              setResending(false)
+            }}
+            disabled={resending}
+            className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {resending ? '재전송 중...' : '인증 링크 재전송'}
+          </button>
+          
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setEmailSent(false)
+                setFormData({
+                  displayName: '',
+                  email: formData.email, // 이메일 유지
+                  password: '',
+                  confirmPassword: '',
+                  region: ''
+                })
+              }}
+              className="flex-1 bg-gray-200 text-gray-700 py-2 px-4 rounded-lg font-medium hover:bg-gray-300 transition"
+            >
+              다시 시도
+            </button>
+            <button
+              type="button"
+              onClick={() => onSwitchToLogin(formData.email)}
+              className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition"
+            >
+              로그인으로 이동
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

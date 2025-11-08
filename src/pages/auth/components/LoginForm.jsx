@@ -2,16 +2,26 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../../contexts/AuthContext'
 
 function LoginForm({ onClose, onSwitchToSignup, initialEmail = '' }) {
-  const [email, setEmail] = useState(initialEmail)
+  // initialEmail이 문자열인지 확인하고, 객체가 아닌지 체크
+  const getInitialEmail = () => {
+    if (typeof initialEmail === 'string' && initialEmail.trim() !== '') {
+      return initialEmail
+    }
+    return ''
+  }
+  
+  const [email, setEmail] = useState(getInitialEmail())
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
 
-  // initialEmail이 변경되면 이메일 업데이트
+  // initialEmail이 변경되면 이메일 업데이트 (문자열인 경우만)
   useEffect(() => {
-    if (initialEmail) {
+    if (typeof initialEmail === 'string' && initialEmail.trim() !== '') {
       setEmail(initialEmail)
+    } else {
+      setEmail('')
     }
   }, [initialEmail])
 
