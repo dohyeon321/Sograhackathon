@@ -2,7 +2,7 @@ import { useState } from 'react'
 import BoardView from './components/BoardView'
 import CategoryFilter from './components/CategoryFilter'
 
-function BoardPage({ refreshTrigger, onWriteClick }) {
+function BoardPage({ refreshTrigger, onWriteClick, onPostClick }) {
   const [selectedCategory, setSelectedCategory] = useState('all')
 
   return (
@@ -11,7 +11,11 @@ function BoardPage({ refreshTrigger, onWriteClick }) {
         selectedCategory={selectedCategory} 
         setSelectedCategory={setSelectedCategory} 
       />
-      <BoardView selectedCategory={selectedCategory} refreshTrigger={refreshTrigger} />
+      <BoardView 
+        selectedCategory={selectedCategory} 
+        refreshTrigger={refreshTrigger}
+        onPostClick={onPostClick}
+      />
     </>
   )
 }

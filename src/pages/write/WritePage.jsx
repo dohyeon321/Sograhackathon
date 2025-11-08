@@ -11,7 +11,7 @@ const CATEGORIES = [
   { id: '꿀팁', label: '꿀팁', emoji: '💡' }
 ]
 
-function WritePostModal({ isOpen, onClose, onSuccess }) {
+function WritePage({ onClose, onSuccess }) {
   const { currentUser, userData } = useAuth()
   const fileInputRef = useRef(null)
   const [formData, setFormData] = useState({
@@ -26,8 +26,6 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
   const [imagePreviews, setImagePreviews] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  if (!isOpen) return null
 
   if (!currentUser) {
     return null
@@ -237,20 +235,22 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">게시물 작성</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        {/* 뒤로가기 버튼 */}
+        <button
+          onClick={onClose}
+          className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-800 transition"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          목록으로
+        </button>
+
+        {/* 게시물 작성 폼 */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">게시물 작성</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
@@ -327,7 +327,7 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
                   value={formData.location}
                   onChange={handleChange}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="예: 대전 중구 은행동 (대전/충청 지역만 표시됩니다)"
+                  placeholder="예: 대전 중구 은행동"
                   required
                 />
                 <button
@@ -338,9 +338,6 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
                   지도에서 선택
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                💡 대전, 충청남도, 충청북도, 세종 지역만 표시됩니다
-              </p>
             </div>
 
             <div>
@@ -407,5 +404,5 @@ function WritePostModal({ isOpen, onClose, onSuccess }) {
   )
 }
 
-export default WritePostModal
+export default WritePage
 

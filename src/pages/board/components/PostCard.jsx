@@ -1,4 +1,4 @@
-function PostCard({ post }) {
+function PostCard({ post, onClick }) {
   const formatViews = (views) => {
     if (views >= 1000) {
       return `${(views / 1000).toFixed(1)}k`
@@ -6,8 +6,17 @@ function PostCard({ post }) {
     return views.toString()
   }
 
+  const handleClick = () => {
+    if (onClick) {
+      onClick(post.id)
+    }
+  }
+
   return (
-    <div className="bg-white rounded-lg shadow-sm hover:shadow-lg transition cursor-pointer overflow-hidden">
+    <div 
+      className="bg-white rounded-lg shadow-sm hover:shadow-lg transition cursor-pointer overflow-hidden"
+      onClick={handleClick}
+    >
       <div className="relative h-48 bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-6xl overflow-hidden">
         {post.images && post.images.length > 0 ? (
           <img 

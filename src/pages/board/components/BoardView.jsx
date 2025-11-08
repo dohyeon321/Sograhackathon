@@ -24,18 +24,10 @@ function formatTimeAgo(timestamp) {
   return `${Math.floor(diffInSeconds / 604800)}주 전`
 }
 
-function BoardView({ selectedCategory, refreshTrigger }) {
+function BoardView({ selectedCategory, refreshTrigger, onPostClick }) {
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-
-  // 대전 충청 지역 필터링 함수
-  const isDaejeonChungcheong = (location) => {
-    if (!location) return false
-    const locationLower = location.toLowerCase()
-    const keywords = ['대전', '충청', '충남', '충북', '세종', '천안', '아산', '당진', '서산', '태안', '보령', '공주', '논산', '계룡', '금산', '부여', '서천', '청양', '홍성', '예산', '청주', '충주', '제천', '보은', '옥천', '영동', '증평', '진천', '괴산', '음성', '단양', '대전광역시', '충청남도', '충청북도', '세종특별자치시']
-    return keywords.some(keyword => locationLower.includes(keyword))
-  }
 
   const fetchPosts = async () => {
     try {
@@ -53,7 +45,7 @@ function BoardView({ selectedCategory, refreshTrigger }) {
       const q = query(postsRef, orderBy('createdAt', 'desc'))
       const querySnapshot = await getDocs(q)
       
-      const allPostsData = querySnapshot.docs.map(doc => {
+      const postsData = querySnapshot.docs.map(doc => {
         const data = doc.data()
         return {
           id: doc.id,
@@ -66,35 +58,9 @@ function BoardView({ selectedCategory, refreshTrigger }) {
         }
       })
       
-      console.log('전체 게시물 수:', allPostsData.length)
-      console.log('게시물 목록:', allPostsData.map(p => ({ id: p.id, title: p.title, location: p.location, authorRegion: p.authorRegion })))
+      console.log('전체 게시물 수:', postsData.length)
       
-      // 대전 충청 지역 필터링
-      // authorRegion이 대전/충청이면 무조건 통과, 아니면 location 확인
-      const filteredPostsData = allPostsData.filter(post => {
-        // authorRegion이 대전/충청이면 무조건 통과
-        if (post.authorRegion && isDaejeonChungcheong(post.authorRegion)) {
-          return true
-        }
-        // location에 대전/충청 키워드가 있으면 통과
-        const matches = isDaejeonChungcheong(post.location)
-        if (!matches) {
-          console.log('필터링 제외된 게시물:', { 
-            id: post.id, 
-            title: post.title, 
-            location: post.location, 
-            authorRegion: post.authorRegion 
-          })
-        }
-        return matches
-      })
-      
-      // 임시: 필터링 비활성화 (테스트용)
-      // const filteredPostsData = allPostsData
-      
-      console.log('필터링 후 게시물 수:', filteredPostsData.length)
-      
-      setPosts(filteredPostsData)
+      setPosts(postsData)
     } catch (err) {
       console.error('게시물 불러오기 에러:', err)
       setError(`게시물을 불러오는 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
@@ -147,7 +113,7 @@ function BoardView({ selectedCategory, refreshTrigger }) {
     <div className="max-w-7xl mx-auto px-6 py-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPosts.map((post) => (
-          <PostCard key={post.id} post={post} />
+          <PostCard key={post.id} post={post} onClick={onPostClick} />
         ))}
       </div>
     </div>

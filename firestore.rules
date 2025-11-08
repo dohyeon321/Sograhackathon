@@ -25,18 +25,30 @@ service cloud.firestore {
         && request.auth.uid == resource.data.authorId;
     }
     
-    // 댓글 규칙 (향후 확장용)
+    // 댓글 규칙
     match /comments/{commentId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
+      // 모든 사용자가 읽기 가능
+      allow read: if true;
+      // 인증된 사용자만 댓글 작성 가능
+      allow create: if request.auth != null 
+        && request.auth.uid == request.resource.data.userId
+        && request.resource.data.postId is string
+        && request.resource.data.content is string;
+      // 댓글 수정/삭제는 작성자만 가능
       allow update, delete: if request.auth != null 
-        && request.auth.uid == resource.data.authorId;
+        && request.auth.uid == resource.data.userId;
     }
     
-    // 좋아요 규칙 (향후 확장용)
+    // 좋아요 규칙
     match /likes/{likeId} {
-      allow read: if request.auth != null;
-      allow create, delete: if request.auth != null;
+      // 모든 사용자가 읽기 가능
+      allow read: if true;
+      // 인증된 사용자만 좋아요 생성/삭제 가능
+      allow create: if request.auth != null 
+        && request.auth.uid == request.resource.data.userId
+        && request.resource.data.postId is string;
+      allow delete: if request.auth != null 
+        && request.auth.uid == resource.data.userId;
     }
   }
 }
