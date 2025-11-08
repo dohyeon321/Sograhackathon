@@ -34,7 +34,7 @@ function PostCard({ post, onClick }) {
       <div className="p-4">
         <div className="flex items-center gap-2 mb-2 text-sm text-gray-500">
           <span>{post.author}</span>
-          {post.isLocal && (
+          {post.authorIsLocal && (
             <span className="bg-yellow-400 text-white px-2 py-0.5 rounded text-xs font-semibold">
               로컬
             </span>

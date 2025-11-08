@@ -54,15 +54,20 @@ function BoardView({ selectedCategory, refreshTrigger, onPostClick }) {
           emoji: CATEGORY_EMOJI[data.category] || '📝',
           timeAgo: formatTimeAgo(data.createdAt),
           excerpt: data.content?.substring(0, 100) + '...' || '',
-          isLocal: true
+          authorIsLocal: data.authorIsLocal === true // 작성자의 로컬 인증 여부
         }
       })
       
-      console.log('전체 게시물 수:', postsData.length)
+      if (import.meta.env.DEV) {
+        console.log('전체 게시물 수:', postsData.length)
+        console.log('로컬 인증 게시물 수:', postsData.filter(p => p.authorIsLocal === true).length)
+      }
       
       setPosts(postsData)
     } catch (err) {
-      console.error('게시물 불러오기 에러:', err)
+      if (import.meta.env.DEV) {
+        console.error('게시물 불러오기 에러:', err)
+      }
       setError(`게시물을 불러오는 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
     } finally {
       setLoading(false)
@@ -76,6 +81,8 @@ function BoardView({ selectedCategory, refreshTrigger, onPostClick }) {
 
   const filteredPosts = selectedCategory === 'all' 
     ? posts 
+    : selectedCategory === 'local'
+    ? posts.filter(post => post.authorIsLocal === true)
     : posts.filter(post => post.category === selectedCategory)
 
   if (loading) {

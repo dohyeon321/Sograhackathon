@@ -439,6 +439,7 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
         postData.authorId = currentUser.uid // Firebase에서 검증됨
         postData.authorName = sanitizeInput(userData?.displayName || currentUser.email || '익명')
         postData.authorRegion = sanitizeInput(userData?.region || '')
+        postData.authorIsLocal = userData?.isLocal === true // 작성자의 로컬 인증 여부
         postData.likes = 0
         postData.comments = 0
         postData.views = 0
