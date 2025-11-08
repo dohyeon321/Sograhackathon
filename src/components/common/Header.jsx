@@ -51,17 +51,22 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-5">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <img 
-                src="/logo1.png" 
-                alt="찐대충인 로고" 
-                className="w-16 h-16 object-contain"
+            <div className="flex items-center gap-2">
+              <img
+                src="/logo1.png"
+                alt="찐대충인 로고"
+                className="w-24 h-35 object-contain"
                 onError={(e) => { e.target.style.display = 'none' }}
               />
-              <h1 className="text-3xl font-bold text-gray-700">
-                <span className="text-blue-500">찐대충인</span>
+              <h1
+                className="text-4xl font-bold"
+                style={{ fontFamily: 'Jua, sans-serif', color: '#000000' }}
+              >
+                찐대충인
               </h1>
+
             </div>
+
 
             <div className="flex items-center gap-3">
               {currentUser ? (
@@ -74,13 +79,13 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
                     }}
                     className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition"
                   >
-                    {/* 아바타 */}
-                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-semibold">
+                    <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-white text-sm font-semibold">
                       {userData?.displayName?.[0] ||
                         currentUser?.displayName?.[0] ||
                         currentUser?.email?.[0]?.toUpperCase() ||
                         '유'}
                     </div>
+
 
                     {/* 이름 + 로컬 뱃지 */}
                     <div className="hidden md:flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -164,10 +169,14 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
               {/* 글쓰기 버튼 */}
               <button
                 onClick={handleWriteClick}
-                className="px-5 py-2.5 bg-blue-500 text-white rounded-lg text-base font-medium hover:bg-blue-600 transition"
+                className="px-5 py-2.5 rounded-lg text-base font-medium text-white 
+             bg-gray-900 hover:bg-gray-700
+             shadow-sm hover:shadow-md active:scale-[0.98]
+             transition-all duration-300"
               >
                 글쓰기
               </button>
+
             </div>
           </div>
         </div>

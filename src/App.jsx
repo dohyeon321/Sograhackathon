@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
 import { AuthProvider } from './contexts/AuthContext'
 import Header from './components/common/Header'
 import HotIssueBanner from './components/common/HotIssueBanner'
@@ -12,7 +13,6 @@ import PostDetailPage from './pages/post/PostDetailPage'
 import UserProfilePage from './pages/user/UserProfilePage'
 import WritePage from './pages/write/WritePage'
 import AuthPage from './pages/auth/AuthPage'
-
 function App() {
   const [activeTab, setActiveTab] = useState('board')
   const [currentPage, setCurrentPage] = useState('board') // board, map, daejeonChungcheong, attractionDetail, postDetail, userProfile, write, auth
@@ -20,23 +20,18 @@ function App() {
   const [selectedAttraction, setSelectedAttraction] = useState(null) // { region, id }
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [previousPage, setPreviousPage] = useState('board') // 이전 페이지 추적
-  const [editPostId, setEditPostId] = useState(null) // 수정할 게시물 ID
-  const [editPostData, setEditPostData] = useState(null) // 수정할 게시물 데이터
-  const tabNavigationRef = useRef(null) // 탭 네비게이션 참조
+  const [previousPage, setPreviousPage] = useState('board')
+  const [editPostId, setEditPostId] = useState(null)
+  const [editPostData, setEditPostData] = useState(null)
+  const tabNavigationRef = useRef(null)
 
-  // 지도 페이지로 전환 시 탭 네비게이션 아래로 스크롤
+  // 지도 페이지 전환 시 자동 스크롤
   useEffect(() => {
     if (currentPage === 'map' && tabNavigationRef.current) {
-      // 약간의 지연을 두어 DOM이 렌더링된 후 스크롤
       setTimeout(() => {
-        const tabNavElement = tabNavigationRef.current
-        if (tabNavElement) {
-          const tabNavBottom = tabNavElement.offsetTop + tabNavElement.offsetHeight
-          window.scrollTo({
-            top: tabNavBottom,
-            behavior: 'smooth'
-          })
+        const tabNav = tabNavigationRef.current
+        if (tabNav) {
+          window.scrollTo({ top: tabNav.offsetTop + tabNav.offsetHeight, behavior: 'smooth' })
         }
       }, 100)
     }
@@ -44,23 +39,22 @@ function App() {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
-    setCurrentPage(tab) // 탭 변경 시 페이지도 함께 변경
+    setCurrentPage(tab)
   }
 
-  const handleWriteClick = () => {
-    setCurrentPage('write')
-  }
+  const handleWriteClick = () => setCurrentPage('write')
+  const handleProfileClick = () => setCurrentPage('userProfile')
+  const handleLoginClick = () => setShowAuthModal(true)
+  const handleAuthClose = () => setShowAuthModal(false)
 
   const handleWriteSuccess = () => {
-    // 게시물 작성/수정 성공 시 데이터 다시 불러오기
     setRefreshTrigger(prev => prev + 1)
     setEditPostId(null)
     setEditPostData(null)
     setCurrentPage('board')
   }
-  
+
   const handleEditPost = (postId, postData) => {
-    // 수정 페이지로 이동
     setEditPostId(postId)
     setEditPostData(postData)
     setPreviousPage(currentPage)
@@ -68,7 +62,6 @@ function App() {
   }
 
   const handlePostClick = (postId) => {
-    // 현재 페이지를 이전 페이지로 저장
     setPreviousPage(currentPage)
     setSelectedPostId(postId)
     setCurrentPage('postDetail')
@@ -91,42 +84,69 @@ function App() {
     setCurrentPage('attractionDetail')
   }
 
-  const handleProfileClick = () => {
-    setCurrentPage('userProfile')
-  }
-
-  const handleLoginClick = () => {
-    setShowAuthModal(true)
-  }
-
-  const handleAuthClose = () => {
-    setShowAuthModal(false)
-  }
-
   return (
     <AuthProvider>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 text-gray-800">
         {currentPage !== 'postDetail' && currentPage !== 'userProfile' && currentPage !== 'write' && currentPage !== 'attractionDetail' && (
           <>
-            <Header 
-              onWriteClick={handleWriteClick} 
+            <Header
+              onWriteClick={handleWriteClick}
               onProfileClick={handleProfileClick}
               onLoginClick={handleLoginClick}
             />
-            <HotIssueBanner 
-              onPostClick={handlePostClick}
-              refreshTrigger={refreshTrigger}
-            />
+
+            {/* 🌆 메인 히어로 섹션 */}
+            <motion.section
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1.2, ease: 'easeOut' }}
+              className="relative w-full text-white overflow-hidden"
+            >
+              <img
+                src="/img/daejeon.jpg"
+                alt="대전 충청 지역 전경"
+                className="absolute inset-0 w-full h-[80vh] object-cover brightness-[0.45]"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+              <div className="relative z-10 flex flex-col items-center justify-center text-center h-[80vh] px-6">
+                <motion.h1
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3, duration: 0.8 }}
+                  className="text-5xl md:text-6xl font-extrabold mb-6 drop-shadow-2xl tracking-tight"
+                  style={{ fontFamily: "'Pretendard', 'Noto Sans KR', sans-serif" }}
+                >
+                  대전·충청에 오신 것을 환영합니다!
+                </motion.h1>
+                <motion.p
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6, duration: 0.8 }}
+                  className="text-lg md:text-2xl text-white/90 max-w-2xl leading-relaxed"
+                  style={{ fontFamily: "'Pretendard', 'Noto Sans KR', sans-serif" }}
+                >
+                  따뜻한 사람들, 맛있는 음식, 그리고 숨은 명소들을 만나보세요 🌿
+                </motion.p>
+              </div>
+            </motion.section>
+
+            {/* 🔥 핫이슈 섹션 */}
+            <HotIssueBanner onPostClick={handlePostClick} refreshTrigger={refreshTrigger} />
+
+            {/* 📰 지역 뉴스 */}
             <RegionNewsBanner />
+
+            {/* 🧭 탭 네비게이션 */}
             <div ref={tabNavigationRef}>
               <TabNavigation activeTab={activeTab} setActiveTab={handleTabChange} />
             </div>
           </>
         )}
-        
+
+        {/* 📄 페이지 컨텐츠 */}
         {currentPage === 'board' && (
-          <BoardPage 
-            refreshTrigger={refreshTrigger} 
+          <BoardPage
+            refreshTrigger={refreshTrigger}
             onWriteClick={handleWriteClick}
             onPostClick={handlePostClick}
           />
@@ -150,21 +170,13 @@ function App() {
           />
         )}
         {currentPage === 'postDetail' && (
-          <PostDetailPage 
-            postId={selectedPostId} 
-            onBack={handleBack}
-            onEditPost={handleEditPost}
-          />
+          <PostDetailPage postId={selectedPostId} onBack={handleBack} onEditPost={handleEditPost} />
         )}
         {currentPage === 'userProfile' && (
-          <UserProfilePage 
-            onBack={handleBack}
-            onEditPost={handleEditPost}
-            onPostClick={handlePostClick}
-          />
+          <UserProfilePage onBack={handleBack} onEditPost={handleEditPost} onPostClick={handlePostClick} />
         )}
         {currentPage === 'write' && (
-          <WritePage 
+          <WritePage
             onClose={() => {
               setEditPostId(null)
               setEditPostData(null)
@@ -175,15 +187,10 @@ function App() {
             editPostData={editPostData}
           />
         )}
-        
-        <AuthPage 
-          isOpen={showAuthModal} 
-          onClose={handleAuthClose}
-        />
+        <AuthPage isOpen={showAuthModal} onClose={handleAuthClose} />
       </div>
     </AuthProvider>
   )
 }
 
 export default App
-
