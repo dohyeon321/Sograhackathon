@@ -1,0 +1,207 @@
+import { createContext, useContext, useEffect, useState } from 'react'
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updateProfile
+} from 'firebase/auth'
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
+import { auth, db, isFirebaseConfigured } from '../firebase/config'
+
+const AuthContext = createContext()
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
+
+export function AuthProvider({ children }) {
+  const [currentUser, setCurrentUser] = useState(null)
+  const [userData, setUserData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  // 회원가입
+  async function signup(email, password, displayName, region) {
+    try {
+      // Firebase 설정 확인
+      if (!isFirebaseConfigured) {
+        return { 
+          success: false, 
+          error: 'Firebase가 설정되지 않았습니다. .env 파일에 Firebase 설정을 추가해주세요.' 
+        }
+      }
+
+      // 이메일 형식 검증
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(email)) {
+        throw new Error('올바른 이메일 형식이 아닙니다.')
+      }
+
+      // 비밀번호 검증 (최소 8자, 영문+숫자+특수문자)
+      const passwordRegex = /^(?=.*[a-zA-Z])(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/
+      if (!passwordRegex.test(password)) {
+        throw new Error('비밀번호는 최소 8자 이상이며, 영문, 숫자, 특수문자를 포함해야 합니다.')
+      }
+
+      // Firebase Auth 초기화 확인
+      if (!auth) {
+        return { 
+          success: false, 
+          error: 'Firebase가 초기화되지 않았습니다. 서버를 재시작해주세요.' 
+        }
+      }
+
+      // Firebase Auth로 사용자 생성
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
+
+      // 프로필 업데이트
+      await updateProfile(user, {
+        displayName: displayName
+      })
+
+      // Firestore에 사용자 정보 저장
+      const userData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: displayName,
+        region: region,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }
+
+      await setDoc(doc(db, 'users', user.uid), userData)
+
+      return { success: true }
+    } catch (error) {
+      console.error('회원가입 에러:', error)
+      let errorMessage = '회원가입 중 오류가 발생했습니다.'
+      
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = '이미 사용 중인 이메일입니다.'
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = '비밀번호가 너무 약합니다.'
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = '올바른 이메일 형식이 아닙니다.'
+      } else if (error.code === 'auth/configuration-not-found') {
+        errorMessage = 'Firebase Authentication이 활성화되지 않았습니다. Firebase Console에서 Authentication을 활성화해주세요.'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // 로그인
+  async function login(email, password) {
+    try {
+      // Firebase 설정 확인
+      if (!isFirebaseConfigured) {
+        return { 
+          success: false, 
+          error: 'Firebase가 설정되지 않았습니다. .env 파일에 Firebase 설정을 추가해주세요.' 
+        }
+      }
+
+      // Firebase Auth 초기화 확인
+      if (!auth) {
+        return { 
+          success: false, 
+          error: 'Firebase가 초기화되지 않았습니다. 서버를 재시작해주세요.' 
+        }
+      }
+
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      return { success: true, user: userCredential.user }
+    } catch (error) {
+      console.error('로그인 에러:', error)
+      let errorMessage = '로그인 중 오류가 발생했습니다.'
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = '등록되지 않은 이메일입니다.'
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = '비밀번호가 올바르지 않습니다.'
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = '올바른 이메일 형식이 아닙니다.'
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = '너무 많은 시도가 있었습니다. 나중에 다시 시도해주세요.'
+      }
+
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // 로그아웃
+  async function logout() {
+    try {
+      if (!auth) {
+        return { success: false, error: 'Firebase가 초기화되지 않았습니다.' }
+      }
+      await signOut(auth)
+      setUserData(null)
+      return { success: true }
+    } catch (error) {
+      console.error('로그아웃 에러:', error)
+      return { success: false, error: '로그아웃 중 오류가 발생했습니다.' }
+    }
+  }
+
+  // 사용자 데이터 가져오기
+  async function fetchUserData(uid) {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', uid))
+      if (userDoc.exists()) {
+        return userDoc.data()
+      }
+      return null
+    } catch (error) {
+      console.error('사용자 데이터 가져오기 에러:', error)
+      return null
+    }
+  }
+
+  // 인증 상태 변경 감지
+  useEffect(() => {
+    if (!auth) {
+      setLoading(false)
+      return
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user)
+      
+      if (user) {
+        // 사용자 데이터 가져오기
+        const data = await fetchUserData(user.uid)
+        setUserData(data)
+      } else {
+        setUserData(null)
+      }
+      
+      setLoading(false)
+    })
+
+    return unsubscribe
+  }, [auth])
+
+  const value = {
+    currentUser,
+    userData,
+    signup,
+    login,
+    logout,
+    loading
+  }
+
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  )
+}
+
