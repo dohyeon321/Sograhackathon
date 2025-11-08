@@ -37,6 +37,9 @@ function MapView({ onPostClick }) {
   const [selectedCategory, setSelectedCategory] = useState('전체')
   const [mapError, setMapError] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [currentLocation, setCurrentLocation] = useState(null) // 현재 위치
+  const [locationError, setLocationError] = useState(null) // 위치 에러
+  const [isGettingLocation, setIsGettingLocation] = useState(false) // 위치 가져오는 중
   const mapRef = useRef(null)
 
   const categories = ['전체', '맛집', '교통', '핫플', '꿀팁']
@@ -59,7 +62,9 @@ function MapView({ onPostClick }) {
         setMapError(null)
         
         if (!db) {
-          console.warn('Firebase가 초기화되지 않았습니다.')
+          if (import.meta.env.DEV) {
+            console.warn('Firebase가 초기화되지 않았습니다.')
+          }
           setLoading(false)
           return
         }
@@ -84,10 +89,14 @@ function MapView({ onPostClick }) {
           })
           .filter(post => post !== null)
         
-        console.log('지도용 게시물 수:', postsData.length)
+        if (import.meta.env.DEV) {
+          console.log('지도용 게시물 수:', postsData.length)
+        }
         setPosts(postsData)
       } catch (err) {
-        console.error('게시물 불러오기 에러:', err)
+        if (import.meta.env.DEV) {
+          console.error('게시물 불러오기 에러:', err)
+        }
         setMapError(`게시물을 불러오는 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
       } finally {
         setLoading(false)
@@ -99,9 +108,68 @@ function MapView({ onPostClick }) {
     }
   }, [isLoaded])
 
+  // 지도 로드 시 자동으로 현재 위치 가져오기는 제거 (사용자가 버튼을 눌렀을 때만)
+  // useEffect(() => {
+  //   if (isLoaded && navigator.geolocation) {
+  //     // 자동으로 현재 위치 가져오기 (사용자 권한 요청)
+  //     getCurrentLocation()
+  //   }
+  // }, [isLoaded])
+
   const filteredPosts = selectedCategory === '전체'
     ? posts
     : posts.filter(post => post.category === selectedCategory)
+
+  // 현재 위치 가져오기
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('이 브라우저는 위치 서비스를 지원하지 않습니다.')
+      return
+    }
+
+    setIsGettingLocation(true)
+    setLocationError(null)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        }
+        setCurrentLocation(location)
+        
+        // 지도 중심을 현재 위치로 이동
+        if (mapRef.current) {
+          mapRef.current.setCenter(location)
+          mapRef.current.setZoom(15)
+        }
+        
+        setIsGettingLocation(false)
+      },
+      (error) => {
+        setIsGettingLocation(false)
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('위치 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
+            break
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('위치 정보를 사용할 수 없습니다.')
+            break
+          case error.TIMEOUT:
+            setLocationError('위치 정보를 가져오는 시간이 초과되었습니다.')
+            break
+          default:
+            setLocationError('위치 정보를 가져오는 중 오류가 발생했습니다.')
+            break
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    )
+  }
 
   // API 키가 없을 때
   if (!apiKey || apiKey === 'YOUR_API_KEY') {
@@ -173,6 +241,51 @@ function MapView({ onPostClick }) {
         ))}
       </div>
 
+      {/* 현재 위치 버튼 - 사이드바가 열려있을 때는 왼쪽으로 이동 */}
+      <div className={`absolute top-4 z-10 transition-all duration-300 ${showSidebar ? 'right-[400px]' : 'right-4'}`}>
+        <button
+          onClick={getCurrentLocation}
+          disabled={isGettingLocation}
+          className="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg shadow-lg flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          title="현재 위치로 이동"
+        >
+          {isGettingLocation ? (
+            <>
+              <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+              <span className="text-sm font-medium hidden sm:inline">위치 가져오는 중...</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="text-sm font-medium hidden sm:inline">내 위치</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* 위치 에러 메시지 - 사이드바가 열려있을 때는 왼쪽으로 이동 */}
+      {locationError && (
+        <div className={`absolute top-20 z-20 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg max-w-xs transition-all duration-300 ${showSidebar ? 'right-[400px]' : 'right-4'}`}>
+          <div className="flex items-start gap-2">
+            <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-sm font-medium">{locationError}</p>
+              <button
+                onClick={() => setLocationError(null)}
+                className="text-xs mt-1 underline hover:no-underline"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Google Maps */}
       <GoogleMap
         mapContainerStyle={containerStyle}
@@ -186,6 +299,7 @@ function MapView({ onPostClick }) {
           setSelectedLocationPosts([])
         }}
       >
+        {/* 게시물 마커 */}
         {filteredPosts.map((post) => {
           // 카테고리별 색상 설정
           const categoryColors = {

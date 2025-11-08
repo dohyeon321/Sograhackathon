@@ -31,7 +31,7 @@ function SignupForm({ onClose, onSwitchToLogin }) {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signup } = useAuth()
+  const { signup, logout } = useAuth()
   const [isLocalVerified, setIsLocalVerified] = useState(false)
 
 
@@ -103,7 +103,11 @@ function SignupForm({ onClose, onSwitchToLogin }) {
       )
 
       if (result.success) {
-        // 회원가입 성공 시 모달 닫기 및 폼 초기화
+        // 회원가입 성공 시 Firebase Auth에서 자동 로그인된 상태를 로그아웃
+        // 이메일은 유지하고 로그인 창으로 이동
+        const signupEmail = formData.email
+        
+        // 폼 초기화
         setFormData({
           displayName: '',
           email: '',
@@ -111,11 +115,13 @@ function SignupForm({ onClose, onSwitchToLogin }) {
           confirmPassword: '',
           region: ''
         })
-        // 모달 닫기 - Firebase Auth가 자동으로 로그인 상태로 만들어줌
-        // 약간의 지연을 주어 Auth 상태 업데이트를 기다림
-        setTimeout(() => {
-          onClose()
-        }, 100)
+        setIsLocalVerified(false)
+        
+        // Firebase Auth에서 로그아웃 (자동 로그인 방지)
+        await logout()
+        
+        // 로그인 창으로 전환 (이메일 전달)
+        onSwitchToLogin(signupEmail)
       } else {
         setError(result.error)
       }

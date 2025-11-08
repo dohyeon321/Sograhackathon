@@ -1,12 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../../contexts/AuthContext'
 
-function LoginForm({ onClose, onSwitchToSignup }) {
-  const [email, setEmail] = useState('')
+function LoginForm({ onClose, onSwitchToSignup, initialEmail = '' }) {
+  const [email, setEmail] = useState(initialEmail)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+
+  // initialEmail이 변경되면 이메일 업데이트
+  useEffect(() => {
+    if (initialEmail) {
+      setEmail(initialEmail)
+    }
+  }, [initialEmail])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

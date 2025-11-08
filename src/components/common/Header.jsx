@@ -53,7 +53,7 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
               <img 
-                src="/logo.png" 
+                src="/logo1.png" 
                 alt="찐대충인 로고" 
                 className="w-16 h-16 object-contain"
                 onError={(e) => { e.target.style.display = 'none' }}

@@ -5,8 +5,19 @@ import SignupForm from './components/SignupForm'
 
 function AuthPage({ isOpen, onClose, initialMode = 'login' }) {
   const [mode, setMode] = useState(initialMode) // 'login' or 'signup'
+  const [signupEmail, setSignupEmail] = useState('') // 회원가입 시 입력한 이메일
 
   if (!isOpen) return null
+
+  const handleSwitchToLogin = (email = '') => {
+    setSignupEmail(email)
+    setMode('login')
+  }
+
+  const handleSwitchToSignup = () => {
+    setSignupEmail('')
+    setMode('signup')
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -27,9 +38,9 @@ function AuthPage({ isOpen, onClose, initialMode = 'login' }) {
           </div>
 
           {mode === 'signup' ? (
-            <SignupForm onClose={onClose} onSwitchToLogin={() => setMode('login')} />
+            <SignupForm onClose={onClose} onSwitchToLogin={handleSwitchToLogin} />
           ) : (
-            <LoginForm onClose={onClose} onSwitchToSignup={() => setMode('signup')} />
+            <LoginForm onClose={onClose} onSwitchToSignup={handleSwitchToSignup} initialEmail={signupEmail} />
           )}
         </div>
       </div>

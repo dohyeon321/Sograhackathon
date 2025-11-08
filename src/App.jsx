@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import Header from './components/common/Header'
 import HotIssueBanner from './components/common/HotIssueBanner'
@@ -20,6 +20,24 @@ function App() {
   const [previousPage, setPreviousPage] = useState('board') // 이전 페이지 추적
   const [editPostId, setEditPostId] = useState(null) // 수정할 게시물 ID
   const [editPostData, setEditPostData] = useState(null) // 수정할 게시물 데이터
+  const tabNavigationRef = useRef(null) // 탭 네비게이션 참조
+
+  // 지도 페이지로 전환 시 탭 네비게이션 아래로 스크롤
+  useEffect(() => {
+    if (currentPage === 'map' && tabNavigationRef.current) {
+      // 약간의 지연을 두어 DOM이 렌더링된 후 스크롤
+      setTimeout(() => {
+        const tabNavElement = tabNavigationRef.current
+        if (tabNavElement) {
+          const tabNavBottom = tabNavElement.offsetTop + tabNavElement.offsetHeight
+          window.scrollTo({
+            top: tabNavBottom,
+            behavior: 'smooth'
+          })
+        }
+      }, 100)
+    }
+  }, [currentPage])
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
@@ -86,7 +104,9 @@ function App() {
               refreshTrigger={refreshTrigger}
             />
             <RegionNewsBanner />
-            <TabNavigation activeTab={activeTab} setActiveTab={handleTabChange} />
+            <div ref={tabNavigationRef}>
+              <TabNavigation activeTab={activeTab} setActiveTab={handleTabChange} />
+            </div>
           </>
         )}
         

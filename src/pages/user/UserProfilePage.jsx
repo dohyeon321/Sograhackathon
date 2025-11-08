@@ -18,7 +18,7 @@ function formatTimeAgo(timestamp) {
 }
 
 function UserProfilePage({ onBack, onEditPost, onPostClick }) {
-  const { currentUser, userData, logout } = useAuth()
+  const { currentUser, userData, logout, refreshUserData } = useAuth()
   const [userPosts, setUserPosts] = useState([])
   const [userComments, setUserComments] = useState([])
   const [loading, setLoading] = useState(true)
@@ -405,7 +405,54 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
                 </div>
 
                 <button
-                  onClick={() => alert('로컬 인증 기능은 준비 중입니다!')}
+                  onClick={async () => {
+                    if (!currentUser || !db) {
+                      alert('로그인이 필요합니다.')
+                      return
+                    }
+
+                    if (!navigator.geolocation) {
+                      alert('이 브라우저에서는 위치 정보 기능을 지원하지 않습니다.')
+                      return
+                    }
+
+                    // 위치 정보 가져오기
+                    navigator.geolocation.getCurrentPosition(
+                      async (pos) => {
+                        const { latitude, longitude } = pos.coords
+                        
+                        // 대전·충청 지역 확인 (위도: 35.8 ~ 37.2, 경도: 126.5 ~ 128.3)
+                        if (latitude > 35.8 && latitude < 37.2 && longitude > 126.5 && longitude < 128.3) {
+                          try {
+                            // Firestore에 isLocal 업데이트
+                            const userRef = doc(db, 'users', currentUser.uid)
+                            await updateDoc(userRef, {
+                              isLocal: true,
+                              updatedAt: serverTimestamp()
+                            })
+                            
+                            // 사용자 데이터 새로고침
+                            await refreshUserData()
+                            
+                            alert('로컬 인증 성공! 🎉 대전·충청 지역이 확인되었습니다.')
+                          } catch (err) {
+                            if (import.meta.env.DEV) {
+                              console.error('로컬 인증 업데이트 에러:', err)
+                            }
+                            alert('로컬 인증 업데이트 중 오류가 발생했습니다.')
+                          }
+                        } else {
+                          alert('현재 위치가 대전·충청 지역이 아닙니다.')
+                        }
+                      },
+                      (err) => {
+                        if (import.meta.env.DEV) {
+                          console.error('위치 정보 접근 실패:', err)
+                        }
+                        alert('위치 정보 접근이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
+                      }
+                    )
+                  }}
                   className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition"
                 >
                   로컬 인증하러 가기

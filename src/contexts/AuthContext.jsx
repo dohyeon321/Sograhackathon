@@ -172,9 +172,37 @@ export function AuthProvider({ children }) {
       }
       // 다른 에러만 로그 출력
       if (error.code !== 'permission-denied') {
-        console.error('사용자 데이터 가져오기 에러:', error)
+        if (import.meta.env.DEV) {
+          console.error('사용자 데이터 가져오기 에러:', error)
+        }
       }
       return null
+    }
+  }
+
+  // 사용자 데이터 새로고침 (로컬 인증 등 업데이트 후 사용)
+  async function refreshUserData() {
+    if (!currentUser) {
+      return
+    }
+
+    try {
+      const data = await fetchUserData(currentUser.uid)
+      if (data) {
+        setUserData(data)
+      } else {
+        // Fallback — Firestore 데이터 없으면 최소 기본정보
+        setUserData({
+          displayName: currentUser.displayName || currentUser.email?.split('@')[0] || '사용자',
+          email: currentUser.email,
+          region: '',
+          isLocal: false,
+        })
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn('사용자 데이터 새로고침 실패:', e)
+      }
     }
   }
 
@@ -225,6 +253,7 @@ export function AuthProvider({ children }) {
     signup,
     login,
     logout,
+    refreshUserData,
     loading
   }
 

@@ -12,6 +12,9 @@ const CATEGORIES = [
   { id: '꿀팁', label: '꿀팁', emoji: '💡' }
 ]
 
+// libraries 배열을 컴포넌트 외부에 상수로 선언하여 성능 경고 방지
+const libraries = ['places']
+
 function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
   const { currentUser, userData } = useAuth()
   const fileInputRef = useRef(null)
@@ -33,16 +36,19 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
   const [showMapModal, setShowMapModal] = useState(false)
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [locationAlias, setLocationAlias] = useState('')
+  const [clickedAddress, setClickedAddress] = useState('') // 지도 클릭 시 선택한 위치의 주소
+  const [currentLocation, setCurrentLocation] = useState(null) // 현재 위치
+  const [locationError, setLocationError] = useState(null) // 위치 에러
+  const [isGettingLocation, setIsGettingLocation] = useState(false) // 위치 가져오는 중
   const autocompleteRef = useRef(null)
   const mapRef = useRef(null)
   
   // Google Maps API 키 - 프로덕션에서는 환경 변수 필수
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || (import.meta.env.DEV ? "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM" : null)
-  const libraries = ['places']
   
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: apiKey,
-    libraries: libraries
+    libraries: libraries // 컴포넌트 외부에 선언된 상수 사용
   })
 
   if (!currentUser) {
@@ -140,22 +146,34 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
   const handleLocationSelect = () => {
     // 기존 별칭이 있으면 불러오기
     setLocationAlias(formData.locationAlias || '')
+    // 지도 모달 열 때 selectedLocation 초기화 (새로 선택하도록)
+    setSelectedLocation(null)
+    setClickedAddress('') // 클릭한 주소도 초기화
     setShowMapModal(true)
   }
 
   const handleMapClick = (e) => {
-    if (e.latLng) {
+    // 지도 클릭 시 (latLng이 있으면 지도 클릭)
+    if (e && e.latLng) {
       const lat = e.latLng.lat()
       const lng = e.latLng.lng()
-      setSelectedLocation({ lat, lng })
+      const clickedLocation = { lat, lng }
+      
+      if (import.meta.env.DEV) {
+        console.log('지도 클릭:', clickedLocation)
+      }
+      
+      // 선택한 위치 설정 (빨간 마커 표시) - 강제로 새 객체 생성하여 리렌더링 보장
+      setSelectedLocation({ ...clickedLocation })
       
       // Geocoding API를 사용해서 주소 가져오기
       if (window.google && window.google.maps) {
         const geocoder = new window.google.maps.Geocoder()
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        geocoder.geocode({ location: clickedLocation }, (results, status) => {
           if (status === 'OK' && results[0]) {
             const address = results[0].formatted_address
-            // 주소는 업데이트하지만 별칭은 유지
+            setClickedAddress(address) // 클릭한 위치의 주소 표시
+            // 주소 업데이트
             setFormData(prev => ({
               ...prev,
               location: address,
@@ -177,6 +195,7 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
         const address = place.formatted_address || place.name
         
         setSelectedLocation({ lat, lng })
+        setClickedAddress(address) // 선택한 위치의 주소 표시
         // 주소는 업데이트하지만 별칭은 유지
         setFormData(prev => ({
           ...prev,
@@ -200,6 +219,82 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
       alert('지도에서 위치를 선택해주세요.')
     }
   }
+
+  // 현재 위치 가져오기
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('이 브라우저는 위치 서비스를 지원하지 않습니다.')
+      return
+    }
+
+    setIsGettingLocation(true)
+    setLocationError(null)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        }
+        setCurrentLocation(location)
+        setSelectedLocation(location) // 현재 위치를 선택한 위치로 설정
+        
+        // 지도 중심을 현재 위치로 이동
+        if (mapRef.current) {
+          mapRef.current.setCenter(location)
+          mapRef.current.setZoom(15)
+        }
+        
+        // Geocoding API를 사용해서 주소 가져오기
+        if (window.google && window.google.maps) {
+          const geocoder = new window.google.maps.Geocoder()
+          geocoder.geocode({ location: location }, (results, status) => {
+            if (status === 'OK' && results[0]) {
+              const address = results[0].formatted_address
+              setClickedAddress(address) // 클릭한 위치의 주소 표시
+              setFormData(prev => ({
+                ...prev,
+                location: address,
+                locationLat: location.lat,
+                locationLng: location.lng
+              }))
+            }
+          })
+        }
+        
+        setIsGettingLocation(false)
+      },
+      (error) => {
+        setIsGettingLocation(false)
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('위치 권한이 거부되었습니다. 브라우저 설정에서 위치 권한을 허용해주세요.')
+            break
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('위치 정보를 사용할 수 없습니다.')
+            break
+          case error.TIMEOUT:
+            setLocationError('위치 정보를 가져오는 시간이 초과되었습니다.')
+            break
+          default:
+            setLocationError('위치 정보를 가져오는 중 오류가 발생했습니다.')
+            break
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    )
+  }
+
+  // 지도 모달이 열릴 때 자동으로 현재 위치 가져오기
+  useEffect(() => {
+    if (showMapModal && isLoaded && navigator.geolocation) {
+      getCurrentLocation()
+    }
+  }, [showMapModal, isLoaded])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -735,27 +830,79 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
                     </Autocomplete>
                   </div>
 
+                  {/* 현재 위치 버튼 */}
+                  <div className="absolute top-20 right-4 z-10">
+                    <button
+                      onClick={getCurrentLocation}
+                      disabled={isGettingLocation}
+                      className="bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg shadow-lg flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="현재 위치로 이동"
+                    >
+                      {isGettingLocation ? (
+                        <>
+                          <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                          <span className="text-sm font-medium hidden sm:inline">위치 가져오는 중...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span className="text-sm font-medium hidden sm:inline">내 위치</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* 위치 에러 메시지 */}
+                  {locationError && (
+                    <div className="absolute top-28 right-4 z-20 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg max-w-xs">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{locationError}</p>
+                          <button
+                            onClick={() => setLocationError(null)}
+                            className="text-xs mt-1 underline hover:no-underline"
+                          >
+                            닫기
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 지도 */}
                   <GoogleMap
                     mapContainerStyle={{ width: '100%', height: '100%', minHeight: '500px' }}
-                    center={selectedLocation || { lat: 36.3504, lng: 127.3845 }}
-                    zoom={selectedLocation ? 15 : 13}
+                    center={selectedLocation || currentLocation || { lat: 36.3504, lng: 127.3845 }}
+                    zoom={selectedLocation || currentLocation ? 15 : 13}
                     onClick={handleMapClick}
                     options={{
                       mapTypeControl: false,
                       streetViewControl: false,
-                      fullscreenControl: false
+                      fullscreenControl: false,
+                      clickableIcons: false // 마커 클릭 시 지도 클릭 이벤트 방지
                     }}
                     onLoad={(map) => {
                       mapRef.current = map
                     }}
                   >
+                    {/* 선택한 위치 마커 - 빨간색 (지도 클릭 시 표시) */}
                     {selectedLocation && (
                       <Marker
+                        key={`selected-${selectedLocation.lat}-${selectedLocation.lng}`}
                         position={selectedLocation}
                         icon={{
-                          url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+                          url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
+                          scaledSize: { width: 50, height: 50 },
+                          anchor: { x: 25, y: 25 }
                         }}
+                        title="선택한 위치"
+                        zIndex={1000}
                       />
                     )}
                   </GoogleMap>
@@ -763,9 +910,17 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
               )}
             </div>
 
-            {/* 별칭 입력 */}
+            {/* 선택한 위치 정보 및 별칭 입력 */}
             {selectedLocation && (
               <div className="p-4 border-t border-gray-200">
+                {/* 선택한 위치 주소 표시 */}
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-xs text-blue-600 font-medium mb-1">선택한 위치</p>
+                  <p className="text-sm text-gray-800 font-semibold">
+                    {clickedAddress || formData.location || '주소를 가져오는 중...'}
+                  </p>
+                </div>
+                
                 <label htmlFor="locationAlias" className="block text-sm font-medium text-gray-700 mb-2">
                   위치 별칭 (선택사항)
                 </label>
@@ -779,7 +934,7 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
                   maxLength={50}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  별칭을 입력하면 주소 대신 별칭이 표시됩니다. (현재 주소: {formData.location})
+                  별칭을 입력하면 주소 대신 별칭이 표시됩니다.
                 </p>
               </div>
             )}
@@ -790,6 +945,7 @@ function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
                   setShowMapModal(false)
                   setSelectedLocation(null)
                   setLocationAlias('')
+                  setClickedAddress('')
                 }}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition"
               >
