@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore'
+import { collection, query, where, orderBy, getDocs, doc, deleteDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase/config'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -17,7 +17,7 @@ function formatTimeAgo(timestamp) {
   return `${Math.floor(diffInSeconds / 604800)}주 전`
 }
 
-function UserProfilePage({ onBack }) {
+function UserProfilePage({ onBack, onEditPost, onPostClick }) {
   const { currentUser, userData } = useAuth()
   const [userPosts, setUserPosts] = useState([])
   const [userComments, setUserComments] = useState([])
@@ -148,6 +148,143 @@ function UserProfilePage({ onBack }) {
 
   const isLocal = isDaejeonChungcheong(userData?.region)
 
+  // 게시물 삭제
+  const handleDeletePost = async (postId) => {
+    if (!currentUser) return
+    
+    if (!confirm('정말 이 게시물을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return
+    }
+    
+    try {
+      if (!db || !postId) return
+      
+      const postRef = doc(db, 'posts', postId)
+      
+      // 게시물 삭제
+      await deleteDoc(postRef)
+      
+      // 관련 댓글 삭제
+      const commentsRef = collection(db, 'comments')
+      const commentsQuery = query(commentsRef, where('postId', '==', postId))
+      const commentsSnapshot = await getDocs(commentsQuery)
+      
+      const deletePromises = commentsSnapshot.docs.map(doc => deleteDoc(doc.ref))
+      await Promise.all(deletePromises)
+      
+      // 관련 좋아요 삭제
+      const likesRef = collection(db, 'likes')
+      const likesQuery = query(likesRef, where('postId', '==', postId))
+      const likesSnapshot = await getDocs(likesQuery)
+      
+      const deleteLikePromises = likesSnapshot.docs.map(doc => deleteDoc(doc.ref))
+      await Promise.all(deleteLikePromises)
+      
+      // 게시물 목록 새로고침
+      await fetchUserPosts()
+      
+      alert('게시물이 삭제되었습니다.')
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error('게시물 삭제 에러:', err)
+      }
+      alert('게시물 삭제 중 오류가 발생했습니다.')
+    }
+  }
+  
+  // 게시물 수정
+  const handleEditPost = (postId, post) => {
+    if (!currentUser) return
+    
+    // 수정 페이지로 이동
+    if (onEditPost) {
+      onEditPost(postId, post)
+    } else {
+      alert('수정 기능은 준비 중입니다.')
+    }
+  }
+  
+  // 댓글 삭제
+  const handleDeleteComment = async (commentId, postId) => {
+    if (!currentUser) return
+    
+    if (!confirm('정말 이 댓글을 삭제하시겠습니까?')) {
+      return
+    }
+    
+    try {
+      if (!db || !commentId) return
+      
+      const commentRef = doc(db, 'comments', commentId)
+      await deleteDoc(commentRef)
+      
+      // 게시물의 댓글 수 감소
+      if (postId) {
+        const postRef = doc(db, 'posts', postId)
+        await updateDoc(postRef, {
+          comments: increment(-1)
+        })
+      }
+      
+      // 댓글 목록 새로고침
+      await fetchUserComments()
+      
+      alert('댓글이 삭제되었습니다.')
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error('댓글 삭제 에러:', err)
+      }
+      alert('댓글 삭제 중 오류가 발생했습니다.')
+    }
+  }
+  
+  // 댓글 수정
+  const handleEditComment = async (commentId, currentContent) => {
+    if (!currentUser) return
+    
+    const newContent = prompt('댓글을 수정하세요:', currentContent)
+    if (!newContent || newContent.trim() === currentContent) {
+      return
+    }
+    
+    if (newContent.trim().length > 500) {
+      alert('댓글은 500자 이하여야 합니다.')
+      return
+    }
+    
+    // XSS 방지
+    const sanitizeInput = (input) => {
+      if (!input) return ''
+      return input.trim()
+        .replace(/[<>]/g, '')
+        .replace(/javascript:/gi, '')
+        .replace(/on\w+=/gi, '')
+        .replace(/data:/gi, '')
+    }
+    
+    try {
+      if (!db) return
+      
+      const commentRef = doc(db, 'comments', commentId)
+      await updateDoc(commentRef, {
+        content: sanitizeInput(newContent.trim()),
+        updatedAt: serverTimestamp()
+      })
+      
+      // 댓글 목록 새로고침
+      await fetchUserComments()
+      
+      if (import.meta.env.DEV) {
+        console.log('댓글 수정 완료')
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error('댓글 수정 에러:', err)
+      }
+      alert('댓글 수정 중 오류가 발생했습니다.')
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -272,7 +409,33 @@ function UserProfilePage({ onBack }) {
                 <div key={post.id} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2">{post.title}</h3>
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 
+                          className="text-lg font-semibold text-gray-800 cursor-pointer hover:text-blue-600 transition"
+                          onClick={() => {
+                            if (onPostClick) {
+                              onPostClick(post.id)
+                            }
+                          }}
+                        >
+                          {post.title}
+                        </h3>
+                        {/* 삭제/수정 버튼 */}
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => handleEditPost(post.id, post)}
+                            className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition"
+                          >
+                            수정
+                          </button>
+                          <button
+                            onClick={() => handleDeletePost(post.id)}
+                            className="px-3 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </div>
                       <p className="text-sm text-gray-600 line-clamp-2 mb-3">{post.content}</p>
                       <div className="flex items-center gap-4 text-sm text-gray-500">
                         <span>📍 {post.location}</span>
@@ -314,12 +477,38 @@ function UserProfilePage({ onBack }) {
                       {comment.userName?.[0] || '익'}
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-medium text-gray-800">{comment.userName || '익명'}</span>
-                        <span className="text-xs text-gray-500">{comment.timeAgo}</span>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-800">{comment.userName || '익명'}</span>
+                          <span className="text-xs text-gray-500">{comment.timeAgo}</span>
+                        </div>
+                        {/* 삭제/수정 버튼 */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditComment(comment.id, comment.content)}
+                            className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition"
+                          >
+                            수정
+                          </button>
+                          <button
+                            onClick={() => handleDeleteComment(comment.id, comment.postId)}
+                            className="px-3 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition"
+                          >
+                            삭제
+                          </button>
+                        </div>
                       </div>
                       <p className="text-gray-700 mb-2">{comment.content}</p>
-                      <p className="text-xs text-gray-500">게시물 ID: {comment.postId}</p>
+                      <p 
+                        className="text-xs text-blue-500 cursor-pointer hover:underline"
+                        onClick={() => {
+                          if (onPostClick && comment.postId) {
+                            onPostClick(comment.postId)
+                          }
+                        }}
+                      >
+                        게시물 보기
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -18,6 +18,8 @@ function App() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [previousPage, setPreviousPage] = useState('board') // 이전 페이지 추적
+  const [editPostId, setEditPostId] = useState(null) // 수정할 게시물 ID
+  const [editPostData, setEditPostData] = useState(null) // 수정할 게시물 데이터
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
@@ -29,9 +31,19 @@ function App() {
   }
 
   const handleWriteSuccess = () => {
-    // 게시물 작성 성공 시 데이터 다시 불러오기
+    // 게시물 작성/수정 성공 시 데이터 다시 불러오기
     setRefreshTrigger(prev => prev + 1)
+    setEditPostId(null)
+    setEditPostData(null)
     setCurrentPage('board')
+  }
+  
+  const handleEditPost = (postId, postData) => {
+    // 수정 페이지로 이동
+    setEditPostId(postId)
+    setEditPostData(postData)
+    setPreviousPage(currentPage)
+    setCurrentPage('write')
   }
 
   const handlePostClick = (postId) => {
@@ -90,15 +102,26 @@ function App() {
           <PostDetailPage 
             postId={selectedPostId} 
             onBack={handleBack}
+            onEditPost={handleEditPost}
           />
         )}
         {currentPage === 'userProfile' && (
-          <UserProfilePage onBack={handleBack} />
+          <UserProfilePage 
+            onBack={handleBack}
+            onEditPost={handleEditPost}
+            onPostClick={handlePostClick}
+          />
         )}
         {currentPage === 'write' && (
           <WritePage 
-            onClose={handleBack}
+            onClose={() => {
+              setEditPostId(null)
+              setEditPostData(null)
+              handleBack()
+            }}
             onSuccess={handleWriteSuccess}
+            editPostId={editPostId}
+            editPostData={editPostData}
           />
         )}
         

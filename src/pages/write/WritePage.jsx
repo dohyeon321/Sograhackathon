@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { collection, addDoc, serverTimestamp, getDocs, query, limit } from 'firebase/firestore'
+import { collection, addDoc, serverTimestamp, getDocs, query, limit, doc, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../../firebase/config'
 import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api'
@@ -12,20 +12,22 @@ const CATEGORIES = [
   { id: '꿀팁', label: '꿀팁', emoji: '💡' }
 ]
 
-function WritePage({ onClose, onSuccess }) {
+function WritePage({ onClose, onSuccess, editPostId, editPostData }) {
   const { currentUser, userData } = useAuth()
   const fileInputRef = useRef(null)
+  const isEditMode = !!editPostId && !!editPostData
   const [formData, setFormData] = useState({
-    title: '',
-    content: '',
-    category: '',
-    location: '',
-    locationAlias: '',
-    locationLat: null,
-    locationLng: null
+    title: editPostData?.title || '',
+    content: editPostData?.content || '',
+    category: editPostData?.category || '',
+    location: editPostData?.location || '',
+    locationAlias: editPostData?.locationAlias || '',
+    locationLat: editPostData?.locationLat || null,
+    locationLng: editPostData?.locationLng || null
   })
   const [selectedImages, setSelectedImages] = useState([])
-  const [imagePreviews, setImagePreviews] = useState([])
+  const [imagePreviews, setImagePreviews] = useState([]) // 새로 추가한 이미지 미리보기
+  const [existingImages, setExistingImages] = useState(editPostData?.images || []) // 기존 이미지
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showMapModal, setShowMapModal] = useState(false)
@@ -323,6 +325,8 @@ function WritePage({ onClose, onSuccess }) {
       }
 
       // Firestore에 게시물 저장 (입력값 정리 및 XSS 방지)
+      const finalImageUrls = [...existingImages, ...imageUrls] // 기존 이미지 + 새 이미지
+      
       const postData = {
         title: sanitizeInput(formData.title.trim()),
         content: sanitizeInput(formData.content.trim()),
@@ -331,16 +335,21 @@ function WritePage({ onClose, onSuccess }) {
         locationAlias: formData.locationAlias ? sanitizeInput(formData.locationAlias.trim()) : null,
         locationLat: typeof formData.locationLat === 'number' ? formData.locationLat : null, // 타입 검증
         locationLng: typeof formData.locationLng === 'number' ? formData.locationLng : null, // 타입 검증
-        images: Array.isArray(imageUrls) ? imageUrls : [], // 배열 타입 검증
-        authorId: currentUser.uid, // Firebase에서 검증됨
-        authorName: sanitizeInput(userData?.displayName || currentUser.email || '익명'),
-        authorRegion: sanitizeInput(userData?.region || ''),
-        likes: 0,
-        comments: 0,
-        views: 0,
-        createdAt: serverTimestamp(),
+        images: Array.isArray(finalImageUrls) ? finalImageUrls : [], // 배열 타입 검증
         updatedAt: serverTimestamp()
       }
+      
+      // 수정 모드가 아닐 때만 초기값 및 작성자 정보 설정
+      if (!isEditMode) {
+        postData.authorId = currentUser.uid // Firebase에서 검증됨
+        postData.authorName = sanitizeInput(userData?.displayName || currentUser.email || '익명')
+        postData.authorRegion = sanitizeInput(userData?.region || '')
+        postData.likes = 0
+        postData.comments = 0
+        postData.views = 0
+        postData.createdAt = serverTimestamp()
+      }
+      // 수정 모드에서는 authorId, authorName, authorRegion, likes, comments, views, createdAt은 업데이트하지 않음
 
       // 개발 모드에서만 로그 출력
       if (import.meta.env.DEV) {
@@ -361,15 +370,37 @@ function WritePage({ onClose, onSuccess }) {
       }
       
       try {
-        // 타임아웃을 10초로 단축
-        const savePromise = addDoc(collection(db, 'posts'), postData)
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('저장 시간이 초과되었습니다. Firestore 규칙과 네트워크를 확인해주세요.')), 10000)
-        )
-        
-        const docRef = await Promise.race([savePromise, timeoutPromise])
-        if (import.meta.env.DEV) {
-          console.log('게시물 저장 성공:', docRef.id)
+        if (isEditMode) {
+          // 수정 모드: 기존 게시물 업데이트
+          // 보안: 작성자 확인
+          if (editPostData.authorId !== currentUser.uid) {
+            throw new Error('본인이 작성한 게시물만 수정할 수 있습니다.')
+          }
+          
+          const postRef = doc(db, 'posts', editPostId)
+          const updatePromise = updateDoc(postRef, {
+            ...postData,
+            updatedAt: serverTimestamp()
+          })
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('수정 시간이 초과되었습니다. Firestore 규칙과 네트워크를 확인해주세요.')), 10000)
+          )
+          
+          await Promise.race([updatePromise, timeoutPromise])
+          if (import.meta.env.DEV) {
+            console.log('게시물 수정 성공:', editPostId)
+          }
+        } else {
+          // 작성 모드: 새 게시물 생성
+          const savePromise = addDoc(collection(db, 'posts'), postData)
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('저장 시간이 초과되었습니다. Firestore 규칙과 네트워크를 확인해주세요.')), 10000)
+          )
+          
+          const docRef = await Promise.race([savePromise, timeoutPromise])
+          if (import.meta.env.DEV) {
+            console.log('게시물 저장 성공:', docRef.id)
+          }
         }
       } catch (saveError) {
         if (import.meta.env.DEV) {
@@ -382,21 +413,29 @@ function WritePage({ onClose, onSuccess }) {
         throw saveError
       }
 
-      // 폼 초기화
-      setFormData({
-        title: '',
-        content: '',
-        category: '',
-        location: '',
-        locationAlias: '',
-        locationLat: null,
-        locationLng: null
-      })
-      setSelectedImages([])
-      setImagePreviews([])
-      setLocationAlias('')
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+      // 폼 초기화 (수정 모드가 아닐 때만)
+      if (!isEditMode) {
+        setFormData({
+          title: '',
+          content: '',
+          category: '',
+          location: '',
+          locationAlias: '',
+          locationLat: null,
+          locationLng: null
+        })
+        setSelectedImages([])
+        setImagePreviews([])
+        setExistingImages([])
+        setLocationAlias('')
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      } else {
+        // 수정 모드: 새로 추가한 이미지만 초기화
+        setSelectedImages([])
+        setImagePreviews([])
+        setLocationAlias('')
       }
 
       // 이미지 업로드 경고가 있으면 표시
@@ -451,7 +490,9 @@ function WritePage({ onClose, onSuccess }) {
 
         {/* 게시물 작성 폼 */}
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">게시물 작성</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">
+            {isEditMode ? '게시물 수정' : '게시물 작성'}
+          </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
@@ -574,26 +615,48 @@ function WritePage({ onClose, onSuccess }) {
               >
                 + 사진 추가
               </button>
-              {imagePreviews.length > 0 && (
-                <div className="grid grid-cols-5 gap-2 mt-2">
-                  {imagePreviews.map((preview, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={preview}
-                        alt={`미리보기 ${index + 1}`}
-                        className="w-full h-20 object-cover rounded"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(index)}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                          {(imagePreviews.length > 0 || existingImages.length > 0) && (
+                            <div className="grid grid-cols-5 gap-2 mt-2">
+                              {/* 기존 이미지 */}
+                              {existingImages.map((imageUrl, index) => (
+                                <div key={`existing-${index}`} className="relative">
+                                  <img
+                                    src={imageUrl}
+                                    alt={`기존 이미지 ${index + 1}`}
+                                    className="w-full h-20 object-cover rounded"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      // 기존 이미지 제거
+                                      const newExisting = existingImages.filter((_, i) => i !== index)
+                                      setExistingImages(newExisting)
+                                    }}
+                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                              {/* 새로 추가한 이미지 미리보기 */}
+                              {imagePreviews.map((preview, index) => (
+                                <div key={`new-${index}`} className="relative">
+                                  <img
+                                    src={preview}
+                                    alt={`미리보기 ${index + 1}`}
+                                    className="w-full h-20 object-cover rounded"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveImage(index)}
+                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -609,7 +672,7 @@ function WritePage({ onClose, onSuccess }) {
                 disabled={loading}
                 className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? '작성 중...' : '작성하기'}
+                            {loading ? (isEditMode ? '수정 중...' : '작성 중...') : (isEditMode ? '수정하기' : '작성하기')}
               </button>
             </div>
           </form>

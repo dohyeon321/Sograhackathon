@@ -24,7 +24,7 @@ function formatTimeAgo(timestamp) {
   return `${Math.floor(diffInSeconds / 604800)}주 전`
 }
 
-function PostDetailPage({ postId, onBack }) {
+function PostDetailPage({ postId, onBack, onEditPost }) {
   const { currentUser } = useAuth()
   const [post, setPost] = useState(null)
   const [comments, setComments] = useState([])
@@ -246,6 +246,158 @@ function PostDetailPage({ postId, onBack }) {
       .replace(/data:/gi, '') // Data URI 제거
   }
 
+  // 게시물 삭제
+  const handleDeletePost = async () => {
+    if (!currentUser || !post) return
+    
+    // 보안: 작성자 확인
+    if (post.authorId !== currentUser.uid) {
+      alert('본인이 작성한 게시물만 삭제할 수 있습니다.')
+      return
+    }
+    
+    if (!confirm('정말 이 게시물을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return
+    }
+    
+    try {
+      if (!db || !postId) return
+      
+      const postRef = doc(db, 'posts', postId)
+      
+      // 게시물 삭제
+      await deleteDoc(postRef)
+      
+      // 관련 댓글 삭제 (선택사항 - 댓글은 남겨둘 수도 있음)
+      const commentsRef = collection(db, 'comments')
+      const commentsQuery = query(commentsRef, where('postId', '==', postId))
+      const commentsSnapshot = await getDocs(commentsQuery)
+      
+      const deletePromises = commentsSnapshot.docs.map(doc => deleteDoc(doc.ref))
+      await Promise.all(deletePromises)
+      
+      // 관련 좋아요 삭제
+      const likesRef = collection(db, 'likes')
+      const likesQuery = query(likesRef, where('postId', '==', postId))
+      const likesSnapshot = await getDocs(likesQuery)
+      
+      const deleteLikePromises = likesSnapshot.docs.map(doc => deleteDoc(doc.ref))
+      await Promise.all(deleteLikePromises)
+      
+      alert('게시물이 삭제되었습니다.')
+      onBack() // 목록으로 돌아가기
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error('게시물 삭제 에러:', err)
+      }
+      alert('게시물 삭제 중 오류가 발생했습니다.')
+    }
+  }
+  
+  // 게시물 수정
+  const handleEditPostClick = () => {
+    if (!currentUser || !post) return
+    
+    // 보안: 작성자 확인
+    if (post.authorId !== currentUser.uid) {
+      alert('본인이 작성한 게시물만 수정할 수 있습니다.')
+      return
+    }
+    
+    // 수정 페이지로 이동
+    if (onEditPost) {
+      onEditPost(postId, post)
+    } else {
+      alert('수정 기능은 준비 중입니다.')
+    }
+  }
+  
+  // 댓글 삭제
+  const handleDeleteComment = async (commentId, commentUserId) => {
+    if (!currentUser) return
+    
+    // 보안: 작성자 확인
+    if (commentUserId !== currentUser.uid) {
+      alert('본인이 작성한 댓글만 삭제할 수 있습니다.')
+      return
+    }
+    
+    if (!confirm('정말 이 댓글을 삭제하시겠습니까?')) {
+      return
+    }
+    
+    try {
+      if (!db || !postId) return
+      
+      const commentRef = doc(db, 'comments', commentId)
+      await deleteDoc(commentRef)
+      
+      // 게시물의 댓글 수 감소
+      const postRef = doc(db, 'posts', postId)
+      await updateDoc(postRef, {
+        comments: increment(-1)
+      })
+      
+      // 댓글 목록 새로고침
+      await fetchComments()
+      
+      // 게시물 정보 새로고침 (댓글 수 업데이트)
+      await fetchPost()
+      
+      if (import.meta.env.DEV) {
+        console.log('댓글 삭제 완료')
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error('댓글 삭제 에러:', err)
+      }
+      alert('댓글 삭제 중 오류가 발생했습니다.')
+    }
+  }
+  
+  // 댓글 수정
+  const handleEditComment = async (commentId, commentUserId, currentContent) => {
+    if (!currentUser) return
+    
+    // 보안: 작성자 확인
+    if (commentUserId !== currentUser.uid) {
+      alert('본인이 작성한 댓글만 수정할 수 있습니다.')
+      return
+    }
+    
+    const newContent = prompt('댓글을 수정하세요:', currentContent)
+    if (!newContent || newContent.trim() === currentContent) {
+      return
+    }
+    
+    if (newContent.trim().length > 500) {
+      alert('댓글은 500자 이하여야 합니다.')
+      return
+    }
+    
+    try {
+      if (!db) return
+      
+      const commentRef = doc(db, 'comments', commentId)
+      await updateDoc(commentRef, {
+        content: sanitizeInput(newContent.trim()),
+        updatedAt: serverTimestamp()
+      })
+      
+      // 댓글 목록 새로고침
+      await fetchComments()
+      
+      if (import.meta.env.DEV) {
+        console.log('댓글 수정 완료')
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.error('댓글 수정 에러:', err)
+      }
+      alert('댓글 수정 중 오류가 발생했습니다.')
+    }
+  }
+
   const handleCommentSubmit = async (e) => {
     e.preventDefault()
     
@@ -369,8 +521,27 @@ function PostDetailPage({ postId, onBack }) {
           )}
 
           <div className="p-6">
-            {/* 제목 */}
-            <h1 className="text-3xl font-bold text-gray-800 mb-4">{post.title}</h1>
+            {/* 제목 및 수정/삭제 버튼 */}
+            <div className="flex items-start justify-between mb-4">
+              <h1 className="text-3xl font-bold text-gray-800 flex-1">{post.title}</h1>
+              {/* 작성자만 수정/삭제 버튼 표시 */}
+              {currentUser && post.authorId === currentUser.uid && (
+                <div className="flex items-center gap-2 ml-4">
+                  <button
+                    onClick={handleEditPostClick}
+                    className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
+                  >
+                    수정
+                  </button>
+                  <button
+                    onClick={handleDeletePost}
+                    className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
+                  >
+                    삭제
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* 작성자 정보 */}
             <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
@@ -457,9 +628,28 @@ function PostDetailPage({ postId, onBack }) {
                     {comment.userName?.[0] || '익'}
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-gray-800">{comment.userName || '익명'}</span>
-                      <span className="text-sm text-gray-500">{comment.timeAgo}</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-800">{comment.userName || '익명'}</span>
+                        <span className="text-sm text-gray-500">{comment.timeAgo}</span>
+                      </div>
+                      {/* 작성자만 수정/삭제 버튼 표시 */}
+                      {currentUser && comment.userId === currentUser.uid && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditComment(comment.id, comment.userId, comment.content)}
+                            className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
+                          >
+                            수정
+                          </button>
+                          <button
+                            onClick={() => handleDeleteComment(comment.id, comment.userId)}
+                            className="text-xs text-red-600 hover:text-red-700 hover:underline"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <p className="text-gray-700">{comment.content}</p>
                   </div>
