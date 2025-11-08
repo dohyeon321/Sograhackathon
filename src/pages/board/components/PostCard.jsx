@@ -49,7 +49,7 @@ function PostCard({ post, onClick }) {
           {post.excerpt}
         </p>
         <div className="text-sm text-blue-500 mb-3">
-          📍 {post.location}
+          📍 {post.locationAlias || post.location}
         </div>
         <div className="flex gap-4 pt-3 border-t border-gray-100 text-sm text-gray-500">
           <span className="flex items-center gap-1">

@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { collection, addDoc, serverTimestamp, getDocs, query, limit } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../../firebase/config'
+import { useLoadScript, GoogleMap, Marker, Autocomplete } from '@react-google-maps/api'
 
 const CATEGORIES = [
   { id: '맛집', label: '맛집', emoji: '🍽️' },
@@ -19,6 +20,7 @@ function WritePage({ onClose, onSuccess }) {
     content: '',
     category: '',
     location: '',
+    locationAlias: '',
     locationLat: null,
     locationLng: null
   })
@@ -26,6 +28,19 @@ function WritePage({ onClose, onSuccess }) {
   const [imagePreviews, setImagePreviews] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showMapModal, setShowMapModal] = useState(false)
+  const [selectedLocation, setSelectedLocation] = useState(null)
+  const [locationAlias, setLocationAlias] = useState('')
+  const autocompleteRef = useRef(null)
+  const mapRef = useRef(null)
+  
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM"
+  const libraries = ['places']
+  
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: apiKey,
+    libraries: libraries
+  })
 
   if (!currentUser) {
     return (
@@ -88,8 +103,67 @@ function WritePage({ onClose, onSuccess }) {
   }
 
   const handleLocationSelect = () => {
-    // 지도에서 위치 선택 기능 (향후 구현)
-    alert('지도에서 위치 선택 기능은 곧 추가될 예정입니다.')
+    // 기존 별칭이 있으면 불러오기
+    setLocationAlias(formData.locationAlias || '')
+    setShowMapModal(true)
+  }
+
+  const handleMapClick = (e) => {
+    if (e.latLng) {
+      const lat = e.latLng.lat()
+      const lng = e.latLng.lng()
+      setSelectedLocation({ lat, lng })
+      
+      // Geocoding API를 사용해서 주소 가져오기
+      if (window.google && window.google.maps) {
+        const geocoder = new window.google.maps.Geocoder()
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            const address = results[0].formatted_address
+            // 주소는 업데이트하지만 별칭은 유지
+            setFormData(prev => ({
+              ...prev,
+              location: address,
+              locationLat: lat,
+              locationLng: lng
+            }))
+          }
+        })
+      }
+    }
+  }
+
+  const handlePlaceSelect = () => {
+    if (autocompleteRef.current) {
+      const place = autocompleteRef.current.getPlace()
+      if (place.geometry) {
+        const lat = place.geometry.location.lat()
+        const lng = place.geometry.location.lng()
+        const address = place.formatted_address || place.name
+        
+        setSelectedLocation({ lat, lng })
+        // 주소는 업데이트하지만 별칭은 유지
+        setFormData(prev => ({
+          ...prev,
+          location: address,
+          locationLat: lat,
+          locationLng: lng
+        }))
+      }
+    }
+  }
+
+  const handleConfirmLocation = () => {
+    if (selectedLocation) {
+      // 주소는 그대로 유지하고, 별칭만 저장
+      setFormData(prev => ({
+        ...prev,
+        locationAlias: locationAlias.trim()
+      }))
+      setShowMapModal(false)
+    } else {
+      alert('지도에서 위치를 선택해주세요.')
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -131,19 +205,29 @@ function WritePage({ onClose, onSuccess }) {
 
       // 이미지 업로드 (실패해도 게시물은 저장)
       const imageUrls = []
+      let imageUploadWarning = null
       if (selectedImages.length > 0 && storage) {
         try {
           for (let i = 0; i < selectedImages.length; i++) {
             const file = selectedImages[i]
             const fileName = `${currentUser.uid}_${Date.now()}_${i}`
             const storageRef = ref(storage, `posts/${fileName}`)
-            await uploadBytes(storageRef, file)
-            const downloadURL = await getDownloadURL(storageRef)
-            imageUrls.push(downloadURL)
+            
+            try {
+              await uploadBytes(storageRef, file)
+              const downloadURL = await getDownloadURL(storageRef)
+              imageUrls.push(downloadURL)
+            } catch (uploadError) {
+              console.warn(`이미지 ${i + 1} 업로드 실패:`, uploadError)
+              // 개별 이미지 업로드 실패는 무시하고 계속 진행
+              if (!imageUploadWarning) {
+                imageUploadWarning = `일부 이미지 업로드에 실패했습니다. (CORS 또는 Storage 규칙을 확인하세요)`
+              }
+            }
           }
         } catch (imageError) {
           console.warn('이미지 업로드 실패:', imageError)
-          // 이미지 업로드 실패해도 게시물은 저장
+          imageUploadWarning = `이미지 업로드에 실패했습니다. (CORS 또는 Storage 규칙을 확인하세요) 게시물은 저장됩니다.`
         }
       }
 
@@ -153,6 +237,7 @@ function WritePage({ onClose, onSuccess }) {
         content: formData.content.trim(),
         category: formData.category,
         location: formData.location.trim(),
+        locationAlias: formData.locationAlias.trim() || null,
         locationLat: formData.locationLat || null,
         locationLng: formData.locationLng || null,
         images: imageUrls,
@@ -211,13 +296,20 @@ function WritePage({ onClose, onSuccess }) {
         content: '',
         category: '',
         location: '',
+        locationAlias: '',
         locationLat: null,
         locationLng: null
       })
       setSelectedImages([])
       setImagePreviews([])
+      setLocationAlias('')
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
+      }
+
+      // 이미지 업로드 경고가 있으면 표시
+      if (imageUploadWarning) {
+        alert(imageUploadWarning)
       }
 
       // 모달 닫기
@@ -335,7 +427,7 @@ function WritePage({ onClose, onSuccess }) {
               <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
                 위치 <span className="text-red-500">*</span>
               </label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-2">
                 <input
                   type="text"
                   id="location"
@@ -345,6 +437,7 @@ function WritePage({ onClose, onSuccess }) {
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="예: 대전 중구 은행동"
                   required
+                  readOnly
                 />
                 <button
                   type="button"
@@ -354,6 +447,19 @@ function WritePage({ onClose, onSuccess }) {
                   지도에서 선택
                 </button>
               </div>
+              <input
+                type="text"
+                id="locationAlias"
+                name="locationAlias"
+                value={formData.locationAlias}
+                onChange={(e) => setFormData({ ...formData, locationAlias: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="별칭을 입력하세요 (선택사항, 예: 우리 집 근처 맛집)"
+                maxLength={50}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                별칭을 입력하면 게시판 목록에서는 별칭이, 상세 페이지에서는 주소가 표시됩니다.
+              </p>
             </div>
 
             <div>
@@ -416,6 +522,133 @@ function WritePage({ onClose, onSuccess }) {
           </form>
         </div>
       </div>
+
+      {/* 지도 모달 */}
+      {showMapModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full h-[80vh] max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-gray-800">위치 선택</h3>
+              <button
+                onClick={() => {
+                  setShowMapModal(false)
+                  setSelectedLocation(null)
+                }}
+                className="text-gray-400 hover:text-gray-600 transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-hidden" style={{ minHeight: '500px', height: '60vh' }}>
+              {!isLoaded ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                    <p className="mt-4 text-gray-600">지도를 불러오는 중...</p>
+                  </div>
+                </div>
+              ) : loadError ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-red-500">지도를 불러오는 중 오류가 발생했습니다.</p>
+                    <p className="text-sm text-gray-500 mt-2">{loadError.message}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full relative" style={{ minHeight: '500px' }}>
+                  {/* 주소 검색 */}
+                  <div className="absolute top-4 left-4 right-4 z-10">
+                    <Autocomplete
+                      onLoad={(autocomplete) => {
+                        autocompleteRef.current = autocomplete
+                      }}
+                      onPlaceChanged={handlePlaceSelect}
+                      options={{
+                        componentRestrictions: { country: 'kr' },
+                        fields: ['formatted_address', 'geometry', 'name']
+                      }}
+                    >
+                      <input
+                        type="text"
+                        placeholder="주소를 검색하세요 (예: 대전 중구 은행동)"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </Autocomplete>
+                  </div>
+
+                  {/* 지도 */}
+                  <GoogleMap
+                    mapContainerStyle={{ width: '100%', height: '100%', minHeight: '500px' }}
+                    center={selectedLocation || { lat: 36.3504, lng: 127.3845 }}
+                    zoom={selectedLocation ? 15 : 13}
+                    onClick={handleMapClick}
+                    options={{
+                      mapTypeControl: false,
+                      streetViewControl: false,
+                      fullscreenControl: false
+                    }}
+                    onLoad={(map) => {
+                      mapRef.current = map
+                    }}
+                  >
+                    {selectedLocation && (
+                      <Marker
+                        position={selectedLocation}
+                        icon={{
+                          url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+                        }}
+                      />
+                    )}
+                  </GoogleMap>
+                </div>
+              )}
+            </div>
+
+            {/* 별칭 입력 */}
+            {selectedLocation && (
+              <div className="p-4 border-t border-gray-200">
+                <label htmlFor="locationAlias" className="block text-sm font-medium text-gray-700 mb-2">
+                  위치 별칭 (선택사항)
+                </label>
+                <input
+                  type="text"
+                  id="locationAlias"
+                  value={locationAlias}
+                  onChange={(e) => setLocationAlias(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="예: 우리 집 근처 맛집, 대전역 앞 카페 등"
+                  maxLength={50}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  별칭을 입력하면 주소 대신 별칭이 표시됩니다. (현재 주소: {formData.location})
+                </p>
+              </div>
+            )}
+
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowMapModal(false)
+                  setSelectedLocation(null)
+                  setLocationAlias('')
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleConfirmLocation}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+              >
+                위치 선택
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

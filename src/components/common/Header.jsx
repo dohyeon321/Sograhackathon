@@ -53,11 +53,22 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
   return (
     <>
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-6 py-5">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-700">
-              <span className="text-blue-500">찐대충인</span>
-            </h1>
+            <div className="flex items-center gap-3">
+              <img 
+                src="/logo.png" 
+                alt="찐대충인 로고" 
+                className="w-16 h-16 object-contain"
+                onError={(e) => {
+                  // 이미지가 없으면 숨김
+                  e.target.style.display = 'none'
+                }}
+              />
+              <h1 className="text-3xl font-bold text-gray-700">
+                <span className="text-blue-500">찐대충인</span>
+              </h1>
+            </div>
             <div className="flex items-center gap-3">
               {currentUser ? (
                 <div className="relative" ref={menuRef}>
@@ -69,12 +80,12 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
                         setShowUserMenu(!showUserMenu)
                       }
                     }}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg hover:bg-gray-100 transition"
                   >
-                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-semibold">
+                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white text-base font-semibold">
                       {userData?.displayName?.[0] || currentUser.email?.[0]?.toUpperCase()}
                     </div>
-                    <span className="hidden md:block text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <span className="hidden md:block text-base font-medium text-gray-700 flex items-center gap-2">
                       {userData?.displayName || '사용자'}
                       {isLocal && (
                         <span className="bg-yellow-400 text-white px-2 py-0.5 rounded text-xs font-semibold">
@@ -128,14 +139,14 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
                       onLoginClick()
                     }
                   }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-500 transition"
+                  className="px-5 py-2.5 text-base font-medium text-gray-700 hover:text-blue-500 transition"
                 >
                   로그인
                 </button>
               )}
               <button
                 onClick={handleWriteClick}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition"
+                className="px-5 py-2.5 bg-blue-500 text-white rounded-lg text-base font-medium hover:bg-blue-600 transition"
               >
                 글쓰기
               </button>

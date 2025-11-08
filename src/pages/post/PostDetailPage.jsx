@@ -331,7 +331,9 @@ function PostDetailPage({ postId, onBack }) {
               </div>
               <div>
                 <p className="font-medium text-gray-800">{post.authorName || post.author || '익명'}</p>
-                <p className="text-sm text-gray-500">{post.timeAgo} • 📍 {post.location}</p>
+                <p className="text-sm text-gray-500">
+                  {post.timeAgo} • 📍 {post.locationAlias ? `${post.locationAlias} (${post.location})` : post.location}
+                </p>
               </div>
             </div>
 
