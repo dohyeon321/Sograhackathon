@@ -28,6 +28,8 @@ function UserProfilePage({ onBack }) {
     if (currentUser) {
       fetchUserPosts()
       fetchUserComments()
+    } else {
+      setLoading(false)
     }
   }, [currentUser])
 
@@ -152,6 +154,26 @@ function UserProfilePage({ onBack }) {
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
           <p className="mt-4 text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md mx-auto px-6 py-8">
+          <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+            <div className="text-4xl mb-4">🔒</div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">로그인이 필요합니다</h2>
+            <p className="text-gray-600 mb-6">회원 정보를 보려면 로그인이 필요합니다.</p>
+            <button
+              onClick={onBack}
+              className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+            >
+              돌아가기
+            </button>
+          </div>
         </div>
       </div>
     )

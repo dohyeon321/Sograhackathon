@@ -20,8 +20,19 @@ service cloud.firestore {
       allow create: if request.auth != null 
         && request.auth.uid == request.resource.data.authorId;
       
-      // 게시물 수정/삭제는 작성자만 가능
-      allow update, delete: if request.auth != null 
+      // 게시물 수정은 작성자만 가능하지만, 조회수/좋아요/댓글 수 증가는 모든 사용자 가능
+      // increment()를 사용하므로 affectedKeys()로 체크
+      allow update: if request.auth != null && request.auth.uid == resource.data.authorId
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'likes']))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'comments']))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'comments']))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'likes', 'comments']));
+      
+      // 게시물 삭제는 작성자만 가능
+      allow delete: if request.auth != null 
         && request.auth.uid == resource.data.authorId;
     }
     

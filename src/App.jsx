@@ -16,6 +16,11 @@ function App() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    setCurrentPage(tab) // 탭 변경 시 페이지도 함께 변경
+  }
+
   const handleWriteClick = () => {
     setCurrentPage('write')
   }
@@ -58,7 +63,7 @@ function App() {
               onProfileClick={handleProfileClick}
               onLoginClick={handleLoginClick}
             />
-            <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+            <TabNavigation activeTab={activeTab} setActiveTab={handleTabChange} />
           </>
         )}
         
