@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, orderBy, getDocs, doc, deleteDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, orderBy, getDocs, doc, getDoc, deleteDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase/config'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -23,6 +23,9 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
   const [userComments, setUserComments] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('posts') // posts, comments
+  const [editingCommentId, setEditingCommentId] = useState(null) // 수정 중인 댓글 ID
+  const [editingCommentText, setEditingCommentText] = useState('') // 수정 중인 댓글 내용
+  const [deletingCommentId, setDeletingCommentId] = useState(null) // 삭제 중인 댓글 ID
 
   useEffect(() => {
     if (currentUser) {
@@ -203,64 +206,147 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       return
     }
     
+    // 중복 삭제 방지
+    if (deletingCommentId === commentId) {
+      return
+    }
+    
+    setDeletingCommentId(commentId)
+    
     try {
-      if (!db || !commentId) return
+      if (!db || !commentId) {
+        throw new Error('데이터베이스 또는 댓글 ID가 없습니다.')
+      }
       
+      // 댓글 존재 여부 확인 및 작성자 재확인
       const commentRef = doc(db, 'comments', commentId)
+      const commentSnap = await getDoc(commentRef)
+      
+      if (!commentSnap.exists()) {
+        // 이미 삭제된 댓글인 경우 목록만 새로고침
+        await fetchUserComments()
+        setDeletingCommentId(null)
+        return
+      }
+      
+      // 작성자 재확인 (보안 강화)
+      const commentData = commentSnap.data()
+      if (commentData.userId !== currentUser.uid) {
+        alert('본인이 작성한 댓글만 삭제할 수 있습니다.')
+        setDeletingCommentId(null)
+        return
+      }
+      
+      // 댓글 삭제
       await deleteDoc(commentRef)
       
-      // 게시물의 댓글 수 감소
+      // 게시물의 댓글 수 감소 (음수 방지)
       if (postId) {
         const postRef = doc(db, 'posts', postId)
-        await updateDoc(postRef, {
-          comments: increment(-1)
-        })
+        const postSnap = await getDoc(postRef)
+        
+        if (postSnap.exists()) {
+          const currentComments = postSnap.data().comments || 0
+          if (currentComments > 0) {
+            await updateDoc(postRef, {
+              comments: increment(-1)
+            })
+          } else {
+            // 댓글 수가 0이면 0으로 설정
+            await updateDoc(postRef, {
+              comments: 0
+            })
+          }
+        }
       }
       
       // 댓글 목록 새로고침
       await fetchUserComments()
       
-      alert('댓글이 삭제되었습니다.')
+      if (import.meta.env.DEV) {
+        console.log('댓글 삭제 완료')
+      }
     } catch (err) {
       if (import.meta.env.DEV) {
         console.error('댓글 삭제 에러:', err)
       }
-      alert('댓글 삭제 중 오류가 발생했습니다.')
+      alert(`댓글 삭제 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
+    } finally {
+      setDeletingCommentId(null)
     }
   }
   
-  // 댓글 수정
-  const handleEditComment = async (commentId, currentContent) => {
+  // XSS 방지
+  const sanitizeInput = (input) => {
+    if (!input) return ''
+    return input.trim()
+      .replace(/[<>]/g, '')
+      .replace(/javascript:/gi, '')
+      .replace(/on\w+=/gi, '')
+      .replace(/data:/gi, '')
+  }
+  
+  // 댓글 수정 시작
+  const handleStartEditComment = (commentId, currentContent) => {
     if (!currentUser) return
     
-    const newContent = prompt('댓글을 수정하세요:', currentContent)
-    if (!newContent || newContent.trim() === currentContent) {
+    setEditingCommentId(commentId)
+    setEditingCommentText(currentContent)
+  }
+  
+  // 댓글 수정 취소
+  const handleCancelEditComment = () => {
+    setEditingCommentId(null)
+    setEditingCommentText('')
+  }
+  
+  // 댓글 수정 저장
+  const handleSaveEditComment = async (commentId) => {
+    if (!currentUser || !db) return
+    
+    const newContent = editingCommentText.trim()
+    
+    if (!newContent) {
+      alert('댓글 내용을 입력해주세요.')
       return
     }
     
-    if (newContent.trim().length > 500) {
+    if (newContent.length > 500) {
       alert('댓글은 500자 이하여야 합니다.')
       return
     }
     
-    // XSS 방지
-    const sanitizeInput = (input) => {
-      if (!input) return ''
-      return input.trim()
-        .replace(/[<>]/g, '')
-        .replace(/javascript:/gi, '')
-        .replace(/on\w+=/gi, '')
-        .replace(/data:/gi, '')
-    }
-    
     try {
-      if (!db) return
-      
       const commentRef = doc(db, 'comments', commentId)
+      
+      // 댓글 존재 여부 확인 및 작성자 재확인
+      const commentSnap = await getDoc(commentRef)
+      if (!commentSnap.exists()) {
+        alert('댓글이 존재하지 않습니다.')
+        setEditingCommentId(null)
+        setEditingCommentText('')
+        await fetchUserComments()
+        return
+      }
+      
+      // 작성자 재확인 (보안 강화)
+      const commentData = commentSnap.data()
+      if (commentData.userId !== currentUser.uid) {
+        alert('본인이 작성한 댓글만 수정할 수 있습니다.')
+        setEditingCommentId(null)
+        setEditingCommentText('')
+        return
+      }
+      
+      // 댓글 수정
       await updateDoc(commentRef, {
-        content: sanitizeInput(newContent.trim()),
+        content: sanitizeInput(newContent),
         updatedAt: serverTimestamp()
       })
+      
+      // 수정 모드 종료
+      setEditingCommentId(null)
+      setEditingCommentText('')
       
       // 댓글 목록 새로고침
       await fetchUserComments()
@@ -272,7 +358,7 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
       if (import.meta.env.DEV) {
         console.error('댓글 수정 에러:', err)
       }
-      alert('댓글 수정 중 오류가 발생했습니다.')
+      alert(`댓글 수정 중 오류가 발생했습니다: ${err.message || '알 수 없는 오류'}`)
     }
   }
   if (loading) {
@@ -572,22 +658,57 @@ function UserProfilePage({ onBack, onEditPost, onPostClick }) {
                           <span className="text-xs text-gray-500">{comment.timeAgo}</span>
                         </div>
                         {/* 삭제/수정 버튼 */}
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEditComment(comment.id, comment.content)}
-                            className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition"
-                          >
-                            수정
-                          </button>
-                          <button
-                            onClick={() => handleDeleteComment(comment.id, comment.postId)}
-                            className="px-3 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition"
-                          >
-                            삭제
-                          </button>
-                        </div>
+                        {editingCommentId !== comment.id && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleStartEditComment(comment.id, comment.content)}
+                              className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition"
+                            >
+                              수정
+                            </button>
+                            <button
+                              onClick={() => handleDeleteComment(comment.id, comment.postId)}
+                              disabled={deletingCommentId === comment.id}
+                              className="px-3 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {deletingCommentId === comment.id ? '삭제 중...' : '삭제'}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-gray-700 mb-2">{comment.content}</p>
+                      {/* 수정 모드 */}
+                      {editingCommentId === comment.id ? (
+                        <div className="space-y-2 mb-2">
+                          <textarea
+                            value={editingCommentText}
+                            onChange={(e) => setEditingCommentText(e.target.value)}
+                            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                            rows={3}
+                            maxLength={500}
+                          />
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">
+                              {editingCommentText.length} / 500자
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={handleCancelEditComment}
+                                className="px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-700 hover:bg-gray-100 rounded transition"
+                              >
+                                취소
+                              </button>
+                              <button
+                                onClick={() => handleSaveEditComment(comment.id)}
+                                className="px-3 py-1 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded transition"
+                              >
+                                저장
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-gray-700 mb-2">{comment.content}</p>
+                      )}
                       <p 
                         className="text-xs text-blue-500 cursor-pointer hover:underline"
                         onClick={() => {

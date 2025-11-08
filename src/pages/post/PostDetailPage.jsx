@@ -341,7 +341,7 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
         throw new Error('데이터베이스 또는 게시물 ID가 없습니다.')
       }
       
-      // 댓글 존재 여부 확인
+      // 댓글 존재 여부 확인 및 작성자 재확인
       const commentRef = doc(db, 'comments', commentId)
       const commentSnap = await getDoc(commentRef)
       
@@ -349,6 +349,14 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
         // 이미 삭제된 댓글인 경우 목록만 새로고침
         await fetchComments()
         await fetchPost()
+        setDeletingCommentId(null)
+        return
+      }
+      
+      // 작성자 재확인 (보안 강화)
+      const commentData = commentSnap.data()
+      if (commentData.userId !== currentUser.uid) {
+        alert('본인이 작성한 댓글만 삭제할 수 있습니다.')
         setDeletingCommentId(null)
         return
       }
@@ -432,13 +440,22 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
     try {
       const commentRef = doc(db, 'comments', commentId)
       
-      // 댓글 존재 여부 확인
+      // 댓글 존재 여부 확인 및 작성자 재확인
       const commentSnap = await getDoc(commentRef)
       if (!commentSnap.exists()) {
         alert('댓글이 존재하지 않습니다.')
         setEditingCommentId(null)
         setEditingCommentText('')
         await fetchComments()
+        return
+      }
+      
+      // 작성자 재확인 (보안 강화)
+      const commentData = commentSnap.data()
+      if (commentData.userId !== currentUser.uid) {
+        alert('본인이 작성한 댓글만 수정할 수 있습니다.')
+        setEditingCommentId(null)
+        setEditingCommentText('')
         return
       }
       
@@ -488,15 +505,34 @@ function PostDetailPage({ postId, onBack, onEditPost }) {
     try {
       setSubmittingComment(true)
       
-      if (!db || !postId) return
+      if (!db || !postId) {
+        throw new Error('데이터베이스 또는 게시물 ID가 없습니다.')
+      }
+
+      const trimmedContent = commentText.trim()
+      if (!trimmedContent || trimmedContent.length === 0) {
+        alert('댓글을 입력해주세요.')
+        setSubmittingComment(false)
+        return
+      }
+
+      if (trimmedContent.length > 500) {
+        alert('댓글은 500자 이하여야 합니다.')
+        setSubmittingComment(false)
+        return
+      }
+
+      // userName과 userEmail이 빈 문자열이 되지 않도록 보장
+      const userName = sanitizeInput(currentUser.displayName || currentUser.email?.split('@')[0] || '익명') || '익명'
+      const userEmail = sanitizeInput(currentUser.email || '') || (currentUser.email || '')
 
       const commentsRef = collection(db, 'comments')
       await addDoc(commentsRef, {
         postId: postId, // Firestore에서 검증됨
         userId: currentUser.uid, // Firebase에서 검증됨
-        userEmail: sanitizeInput(currentUser.email || ''),
-        userName: sanitizeInput(currentUser.displayName || currentUser.email?.split('@')[0] || '익명'),
-        content: sanitizeInput(commentText.trim()),
+        userEmail: userEmail,
+        userName: userName,
+        content: sanitizeInput(trimmedContent),
         createdAt: serverTimestamp()
       })
 
