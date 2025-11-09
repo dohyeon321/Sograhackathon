@@ -19,6 +19,7 @@ function App() {
   const [selectedPostId, setSelectedPostId] = useState(null)
   const [selectedAttraction, setSelectedAttraction] = useState(null) // { region, id }
   const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authMode, setAuthMode] = useState('login') // 'login' or 'signup' or 'signupCompleted'
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [previousPage, setPreviousPage] = useState('board')
   const [editPostId, setEditPostId] = useState(null)
@@ -44,8 +45,25 @@ function App() {
 
   const handleWriteClick = () => setCurrentPage('write')
   const handleProfileClick = () => setCurrentPage('userProfile')
-  const handleLoginClick = () => setShowAuthModal(true)
-  const handleAuthClose = () => setShowAuthModal(false)
+  const handleLoginClick = () => {
+    setAuthMode('login')
+    setShowAuthModal(true)
+  }
+  const handleAuthClose = () => {
+    setShowAuthModal(false)
+    setAuthMode('login')
+  }
+  
+  // 이메일 인증 완료 후 회원가입 완료 화면 표시
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('mode') === 'verifyEmail' && urlParams.get('oobCode')) {
+      setAuthMode('signupCompleted')
+      setShowAuthModal(true)
+      // URL 파라미터 제거
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [])
 
   const handleWriteSuccess = () => {
     setRefreshTrigger(prev => prev + 1)
@@ -187,7 +205,11 @@ function App() {
             editPostData={editPostData}
           />
         )}
-        <AuthPage isOpen={showAuthModal} onClose={handleAuthClose} />
+        <AuthPage 
+          isOpen={showAuthModal} 
+          onClose={handleAuthClose} 
+          initialMode={authMode}
+        />
       </div>
     </AuthProvider>
   )
