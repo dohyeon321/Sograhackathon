@@ -6,15 +6,8 @@ function Header({ onWriteClick, onProfileClick, onLoginClick }) {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const menuRef = useRef(null)
 
-  // 대전/충청 지역 확인 함수
-  const isDaejeonChungcheong = (region) => {
-    if (!region) return false
-    const regionLower = region.toLowerCase()
-    const keywords = ['대전', '충청', '충남', '충북', '세종', '대전광역시', '충청남도', '충청북도', '세종특별자치시']
-    return keywords.some(keyword => regionLower.includes(keyword))
-  }
-
-  const isLocal = isDaejeonChungcheong(userData?.region)
+  // 로컬 인증 여부 확인 (userData의 isLocal 필드 직접 확인)
+  const isLocal = userData?.isLocal || false
 
   // 외부 클릭 시 메뉴 닫기
   useEffect(() => {
