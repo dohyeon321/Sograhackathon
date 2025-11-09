@@ -332,21 +332,14 @@ export function AuthProvider({ children }) {
 
           // 이메일 인증이 완료되었지만 회원가입이 완료되지 않은 경우
           if (data && !data.signupCompleted) {
-<<<<<<< HEAD
             // 회원가입 완료 처리 (isLocal 값 유지)
-=======
-            // 회원가입 완료 처리
->>>>>>> 0a1b20c1342782be992d8ddaca9689984fd44bdd
             try {
               await setDoc(doc(db, 'users', user.uid), {
                 ...data,
                 emailVerified: true,
                 signupCompleted: true,
-<<<<<<< HEAD
                 // isLocal 값이 있으면 유지, 없으면 false
                 isLocal: data.isLocal !== undefined ? data.isLocal : false,
-=======
->>>>>>> 0a1b20c1342782be992d8ddaca9689984fd44bdd
                 updatedAt: serverTimestamp()
               }, { merge: true })
               
@@ -363,7 +356,6 @@ export function AuthProvider({ children }) {
             } catch (e) {
               console.error('회원가입 완료 처리 실패:', e)
             }
-<<<<<<< HEAD
           } else if (!data) {
             // Firestore 데이터가 없으면 새로 생성 (이메일 인증 완료 후)
             try {
@@ -393,17 +385,6 @@ export function AuthProvider({ children }) {
                 region: '',
                 isLocal: false,
               }
-=======
-          }
-
-          if (!data) {
-            // Fallback — Firestore 데이터 없으면 최소 기본정보
-            data = {
-              displayName: user.displayName || user.email?.split('@')[0] || '사용자',
-              email: user.email,
-              region: '',
-              isLocal: false,
->>>>>>> 0a1b20c1342782be992d8ddaca9689984fd44bdd
             }
           }
 
