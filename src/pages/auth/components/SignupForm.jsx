@@ -135,7 +135,22 @@ function SignupForm({ onClose, onSwitchToLogin }) {
           onSwitchToLogin(signupEmail)
         }
       } else {
-        setError(result.error)
+        // Firestore 권한 오류인 경우 이메일 인증 안내로 변경
+        if (result.error && result.error.includes('Missing or insufficient permissions')) {
+          // 이메일 인증 링크는 전송되었을 수 있으므로 이메일 인증 화면으로 이동
+          setEmailSent(true)
+          const signupEmail = formData.email
+          setFormData({
+            displayName: '',
+            email: signupEmail, // 이메일은 유지
+            password: '',
+            confirmPassword: '',
+            region: ''
+          })
+          setIsLocalVerified(false)
+        } else {
+          setError(result.error)
+        }
       }
     } catch (error) {
       console.error('회원가입 처리 중 에러:', error)

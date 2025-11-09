@@ -90,12 +90,30 @@ export function AuthProvider({ children }) {
         uid: user.uid,
         email: user.email,
         displayName: displayName,
-        region: region || '',
-        isLocal: isLocal || false,
+        region: region || '', // 지역 정보 저장 (빈 문자열이어도 저장)
+        isLocal: isLocal === true ? true : false, // isLocal 값 명확히 저장
         emailVerified: false, // 이메일 인증 상태
         signupCompleted: false, // 회원가입 완료 여부 (이메일 인증 완료 시 true)
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
+      }
+      
+      console.log('회원가입 시 저장할 사용자 데이터:', userData)
+
+      // Firestore 저장 실패 시 복구를 위해 localStorage에 임시 저장
+      const signupDataForRecovery = {
+        uid: user.uid,
+        email: user.email,
+        displayName: displayName,
+        region: region || '',
+        isLocal: isLocal === true ? true : false,
+        timestamp: Date.now()
+      }
+      try {
+        localStorage.setItem(`signup_${user.uid}`, JSON.stringify(signupDataForRecovery))
+        console.log('회원가입 정보 localStorage 저장 완료:', signupDataForRecovery)
+      } catch (localStorageError) {
+        console.warn('localStorage 저장 실패:', localStorageError)
       }
 
       try {
@@ -107,6 +125,12 @@ export function AuthProvider({ children }) {
         const savedDoc = await getDoc(doc(db, 'users', user.uid))
         if (savedDoc.exists()) {
           console.log('Firestore 저장 확인 완료:', savedDoc.data())
+          // Firestore 저장 성공 시 localStorage에서 삭제
+          try {
+            localStorage.removeItem(`signup_${user.uid}`)
+          } catch (e) {
+            // 무시
+          }
         } else {
           console.error('Firestore 저장 확인 실패: 문서가 존재하지 않음')
         }
@@ -114,10 +138,10 @@ export function AuthProvider({ children }) {
         console.error('Firestore 저장 실패:', firestoreError)
         console.error('Firestore 에러 코드:', firestoreError.code)
         console.error('Firestore 에러 메시지:', firestoreError.message)
-        await signOut(auth)
-        return {
-          success: false,
-          error: `사용자 데이터 저장 중 오류가 발생했습니다: ${firestoreError.message || firestoreError.code || '알 수 없는 오류'}`
+        // Firestore 저장 실패해도 이메일 인증 링크는 전송되었으므로 계속 진행
+        // 이메일 인증 완료 후 Firestore에 데이터가 없으면 localStorage에서 복구
+        if (import.meta.env.DEV) {
+          console.warn('Firestore 저장 실패했지만 이메일 인증 링크는 전송되었습니다. 이메일 인증 완료 후 localStorage에서 데이터를 복구합니다.')
         }
       }
 
@@ -332,16 +356,57 @@ export function AuthProvider({ children }) {
 
           // 이메일 인증이 완료되었지만 회원가입이 완료되지 않은 경우
           if (data && !data.signupCompleted) {
-            // 회원가입 완료 처리 (isLocal 값 유지)
+            // localStorage에서 회원가입 정보 복구 시도 (region, isLocal 값이 없거나 빈 값인 경우)
+            let recoveredSignupData = null
+            if (!data.region || data.isLocal === undefined) {
+              try {
+                const storedData = localStorage.getItem(`signup_${user.uid}`)
+                if (storedData) {
+                  recoveredSignupData = JSON.parse(storedData)
+                  console.log('localStorage에서 회원가입 정보 복구:', recoveredSignupData)
+                  // 24시간 이내 데이터만 사용 (만료된 데이터는 무시)
+                  const dataAge = Date.now() - (recoveredSignupData.timestamp || 0)
+                  if (dataAge > 24 * 60 * 60 * 1000) {
+                    console.warn('localStorage 데이터가 만료되었습니다.')
+                    recoveredSignupData = null
+                  }
+                }
+              } catch (e) {
+                console.warn('localStorage에서 회원가입 정보 복구 실패:', e)
+              }
+            }
+
+            // 회원가입 완료 처리 (isLocal 값 및 region 값 유지, localStorage에서 복구한 값 우선 사용)
             try {
               await setDoc(doc(db, 'users', user.uid), {
                 ...data,
                 emailVerified: true,
                 signupCompleted: true,
-                // isLocal 값이 있으면 유지, 없으면 false
-                isLocal: data.isLocal !== undefined ? data.isLocal : false,
+                // localStorage에서 복구한 값이 있으면 우선 사용, 없으면 기존 값 유지
+                isLocal: recoveredSignupData?.isLocal !== undefined 
+                  ? (recoveredSignupData.isLocal === true ? true : false)
+                  : (data.isLocal !== undefined ? data.isLocal : false),
+                region: recoveredSignupData?.region || data.region || '',
                 updatedAt: serverTimestamp()
               }, { merge: true })
+              
+              console.log('이메일 인증 완료 후 사용자 데이터 업데이트:', {
+                uid: user.uid,
+                isLocal: recoveredSignupData?.isLocal !== undefined 
+                  ? (recoveredSignupData.isLocal === true ? true : false)
+                  : (data.isLocal !== undefined ? data.isLocal : false),
+                region: recoveredSignupData?.region || data.region || ''
+              })
+              
+              // localStorage에서 삭제 (복구 완료)
+              if (recoveredSignupData) {
+                try {
+                  localStorage.removeItem(`signup_${user.uid}`)
+                  console.log('localStorage에서 회원가입 정보 삭제 완료')
+                } catch (e) {
+                  // 무시
+                }
+              }
               
               // 사용자 데이터 새로고침
               data = await fetchUserData(user.uid)
@@ -357,33 +422,60 @@ export function AuthProvider({ children }) {
               console.error('회원가입 완료 처리 실패:', e)
             }
           } else if (!data) {
-            // Firestore 데이터가 없으면 새로 생성 (이메일 인증 완료 후)
+            // Firestore 데이터가 없으면 localStorage에서 회원가입 정보 복구 시도
+            let recoveredSignupData = null
+            try {
+              const storedData = localStorage.getItem(`signup_${user.uid}`)
+              if (storedData) {
+                recoveredSignupData = JSON.parse(storedData)
+                console.log('localStorage에서 회원가입 정보 복구:', recoveredSignupData)
+                // 24시간 이내 데이터만 사용 (만료된 데이터는 무시)
+                const dataAge = Date.now() - (recoveredSignupData.timestamp || 0)
+                if (dataAge > 24 * 60 * 60 * 1000) {
+                  console.warn('localStorage 데이터가 만료되었습니다.')
+                  recoveredSignupData = null
+                }
+              }
+            } catch (e) {
+              console.warn('localStorage에서 회원가입 정보 복구 실패:', e)
+            }
+
+            // Firestore에 새로 생성 (localStorage에서 복구한 정보 사용)
             try {
               const newUserData = {
                 uid: user.uid,
                 email: user.email,
-                displayName: user.displayName || user.email?.split('@')[0] || '사용자',
-                region: '',
-                isLocal: false,
+                displayName: recoveredSignupData?.displayName || user.displayName || user.email?.split('@')[0] || '사용자',
+                region: recoveredSignupData?.region || '',
+                isLocal: recoveredSignupData?.isLocal === true ? true : false,
                 emailVerified: true,
                 signupCompleted: true,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
               }
               
+              console.log('회원가입 정보 복구하여 Firestore에 저장:', newUserData)
               await setDoc(doc(db, 'users', user.uid), newUserData)
               console.log('Firestore 사용자 데이터 생성 완료:', user.uid)
+              
+              // localStorage에서 삭제 (복구 완료)
+              try {
+                localStorage.removeItem(`signup_${user.uid}`)
+                console.log('localStorage에서 회원가입 정보 삭제 완료')
+              } catch (e) {
+                // 무시
+              }
               
               // 사용자 데이터 새로고침
               data = await fetchUserData(user.uid)
             } catch (e) {
               console.error('Firestore 사용자 데이터 생성 실패:', e)
-              // Fallback — Firestore 데이터 없으면 최소 기본정보
+              // Fallback — Firestore 데이터 없으면 localStorage에서 복구한 정보 사용
               data = {
-                displayName: user.displayName || user.email?.split('@')[0] || '사용자',
+                displayName: recoveredSignupData?.displayName || user.displayName || user.email?.split('@')[0] || '사용자',
                 email: user.email,
-                region: '',
-                isLocal: false,
+                region: recoveredSignupData?.region || '',
+                isLocal: recoveredSignupData?.isLocal === true ? true : false,
               }
             }
           }
