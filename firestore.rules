@@ -13,10 +13,16 @@ service cloud.firestore {
         && request.resource.data.email is string
         && request.resource.data.displayName is string
         && (!request.resource.data.hasAll(['region']) || request.resource.data.region is string) // region은 선택사항, 문자열 타입
-        && (!request.resource.data.hasAll(['isLocal']) || request.resource.data.isLocal is bool); // isLocal은 선택사항, boolean 타입
+        && (!request.resource.data.hasAll(['isLocal']) || request.resource.data.isLocal is bool) // isLocal은 선택사항, boolean 타입
+        && (!request.resource.data.hasAll(['emailVerified']) || request.resource.data.emailVerified is bool) // emailVerified는 선택사항, boolean 타입
+        && (!request.resource.data.hasAll(['signupCompleted']) || request.resource.data.signupCompleted is bool) // signupCompleted는 선택사항, boolean 타입
+        && (!request.resource.data.hasAll(['createdAt']) || request.resource.data.createdAt is timestamp) // createdAt은 선택사항, timestamp 타입
+        && (!request.resource.data.hasAll(['updatedAt']) || request.resource.data.updatedAt is timestamp); // updatedAt은 선택사항, timestamp 타입
       
-      // 본인만 수정 가능
-      allow update: if request.auth != null && request.auth.uid == userId;
+      // 본인만 수정 가능 (이메일 인증 완료 후 회원가입 완료 처리 포함)
+      allow update: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId;
       
       // 본인만 삭제 가능
       allow delete: if request.auth != null && request.auth.uid == userId;
