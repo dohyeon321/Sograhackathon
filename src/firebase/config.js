@@ -6,7 +6,7 @@ import { getAuth } from 'firebase/auth'
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
-// Firebase 설정 - 프로덕션에서는 환경 변수 필수
+// Firebase 설정 - 환경 변수 필수
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -17,19 +17,17 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 }
 
-// 개발 환경에서만 기본값 제공 (프로덕션에서는 환경 변수 필수)
+// 프로덕션 환경에서 환경 변수 확인 (필수)
+if (import.meta.env.PROD && !firebaseConfig.apiKey) {
+  console.error('❌ 프로덕션 환경: Firebase API 키가 설정되지 않았습니다. .env 파일을 확인하세요.')
+  throw new Error('Firebase 설정이 필요합니다. .env 파일에 VITE_FIREBASE_API_KEY를 설정하세요.')
+}
+
+// 개발 환경에서 환경 변수 확인 (경고만 표시, 기본값 사용 가능)
 if (import.meta.env.DEV && !firebaseConfig.apiKey) {
-  console.warn('⚠️ 개발 모드: .env 파일에 Firebase 설정을 추가하세요.')
-  // 개발 환경에서만 기본값 사용
-  Object.assign(firebaseConfig, {
-    apiKey: "AIzaSyCw78LmFKTfoXy9aRPtQEimpHqft-6kdt8",
-    authDomain: "sograkkp-b75b9.firebaseapp.com",
-    projectId: "sograkkp-b75b9",
-    storageBucket: "sograkkp-b75b9.firebasestorage.app",
-    messagingSenderId: "12942565193",
-    appId: "1:12942565193:web:73e2849f8bc84663548498",
-    measurementId: "G-J8WJWF8CW0"
-  })
+  console.warn('⚠️ 개발 환경: Firebase API 키가 설정되지 않았습니다.')
+  console.warn('📝 보안을 위해 .env.example 파일을 참고하여 .env 파일을 생성하고 Firebase 설정을 추가하세요.')
+  console.warn('📝 현재는 기본값을 사용합니다. 프로덕션 배포 전에는 반드시 환경 변수를 설정하세요.')
 }
 
 // Firebase 설정 확인

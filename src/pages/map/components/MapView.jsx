@@ -43,8 +43,21 @@ function MapView({ onPostClick }) {
   const mapRef = useRef(null)
 
   const categories = ['전체', '맛집', '교통', '핫플', '꿀팁']
-  // Google Maps API 키 - 프로덕션에서는 환경 변수 필수
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || (import.meta.env.DEV ? "AIzaSyCkjBmgtHXCCUGyEmEOC2z4HJ73Ah1EgrM" : null)
+  // Google Maps API 키 - 환경 변수 필수
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  
+  // 프로덕션 환경에서 API 키 확인 (필수)
+  if (import.meta.env.PROD && !apiKey) {
+    console.error('❌ 프로덕션 환경: Google Maps API 키가 설정되지 않았습니다.')
+    throw new Error('Google Maps API 키가 필요합니다. .env 파일에 VITE_GOOGLE_MAPS_API_KEY를 설정하세요.')
+  }
+  
+  // 개발 환경에서 API 키 확인 (경고만 표시)
+  if (import.meta.env.DEV && !apiKey) {
+    console.warn('⚠️ 개발 환경: Google Maps API 키가 설정되지 않았습니다.')
+    console.warn('📝 보안을 위해 .env.example 파일을 참고하여 .env 파일을 생성하고 VITE_GOOGLE_MAPS_API_KEY를 설정하세요.')
+    console.warn('📝 현재는 지도 기능이 작동하지 않을 수 있습니다. 프로덕션 배포 전에는 반드시 환경 변수를 설정하세요.')
+  }
   
   // libraries 배열을 상수로 빼서 성능 경고 방지
   const libraries = ['places']
